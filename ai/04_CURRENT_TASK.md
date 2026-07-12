@@ -7,48 +7,41 @@
 
 ## Active task
 
-**T-001 — Project Bootstrap (technical foundation)** — ✅ **COMPLETE, awaiting review.**
+**M1.5 — Security Foundation (+ File Storage Abstraction)** — ✅ **COMPLETE, awaiting review.**
+(ADR-0010, ADR-0012. Prior: M0 Bootstrap ✅, M1 API Foundation ✅ / ADR-0008.)
 
 ### Goal
-Stand up a production-grade technical foundation for all three stacks **without any
-business modules**, so future feature work starts from a compiling, documented base.
+Harden the platform *before* authentication (M2) exposes endpoints, so every future
+endpoint is born behind the protections. Platform hardening only — **no business
+logic, no auth endpoints, no token issuance, no document uploads.**
 
 ### What was delivered
-- **Backend** — .NET 9 Clean Architecture solution (`ReturnLoad.sln`): `Api`,
-  `Application`, `Domain`, `Infrastructure`, `Shared`, `UnitTests`,
-  `IntegrationTests`. Wired: DI, config (env-first), Serilog JSON logging, global
-  exception handler (ProblemDetails), Swagger, API versioning (`/api/v1`), health
-  checks (`/health/live`, `/health/ready`, `/api/v1/health`), EF Core + Npgsql
-  (no tables/migrations), JWT bearer (framework only), SignalR foundation hub,
-  Dockerfile. **Builds clean (0 warnings) and 16 tests pass.**
-- **Admin** — Angular standalone workspace: Material (M3), Signals, zoneless,
-  `core/shared/features/layouts` structure, layout shell + dashboard. **`ng build`
-  verified.**
-- **Mobile** — Flutter feature-first scaffold (Riverpod, GoRouter, Dio, flutter_map,
-  secure storage). **Structure only — not build-verified (no Flutter SDK in the
-  bootstrap environment); see `mobile/README.md`.**
-- **Infra** — `docker/docker-compose.yml` (API + PostgreSQL/PostGIS) + `.env.example`.
-- **Docs** — READMEs per stack; ADR-0006 (backend = ASP.NET Core / .NET 9) and
-  ADR-0007 (defer AutoMapper for security/licensing) in `06_DECISION_LOG.md`.
-
-### Deviations from the brief (recorded, not silent)
-- **.NET 9, not .NET 8** — only SDK 9 is installed; net9.0 is build- **and**
-  run-verifiable (ADR-0006).
-- **AutoMapper deferred** — free line has an unpatched high-severity CVE; patched
-  releases are commercial-licensed; zero mappings exist yet (ADR-0007).
-- **Mobile & Docker not build-verified** — no Flutter SDK / Docker engine available
-  in this environment; both are scaffolded and reviewed.
+- **Security headers** on every response (nosniff, frame-DENY, referrer, CSP; `Server`
+  suppressed; CSP relaxed only for Swagger in Dev).
+- **HTTPS/HSTS** (config-gated, outside Development) + forwarded-headers for proxies.
+- **CORS** config-driven allowlist (empty = none); correlation headers exposed.
+- **Rate limiting** (per-IP fixed window + reserved `sensitive` policy) → **429 envelope**
+  + security-event log.
+- **Request body limit** (Kestrel, 10 MB) and **file upload** size/MIME/extension
+  allowlists via `FileUploadValidator`.
+- **JWT config** bound + **fail-fast** validated (no issuance yet); **password policy**
+  values; **security event logging** on 401/403/429.
+- **`IFileStorageService`** (Application) + **local-disk** implementation (Infrastructure)
+  behind the abstraction (ADR-0012).
+- All responses still obey the M1 envelope + correlation contract (ADR-0008).
 
 ### Definition of Done check
-- [x] Everything in scope compiles (backend + admin verified; mobile scaffold).
-- [x] No business entities / tables / migrations / auth logic / non-health APIs.
-- [x] No TODOs or placeholder code; SOLID + Clean Architecture layering.
-- [x] Meaningful tests pass (14 unit + 2 integration).
-- [x] Decisions recorded in `06_DECISION_LOG.md`.
+- [x] Platform hardening in place; no business logic / endpoints / token issuance.
+- [x] No new third-party deps (built-in rate limiting/CORS; one first-party options helper).
+- [x] Tests pass — **68 total** (53 unit, 9 integration, 6 architecture).
+- [x] Manual smoke: headers present, no `Server` banner, enveloped 429, Swagger loads.
+- [x] Decisions/contracts recorded (ADR-0010/0012; Technical Bible §7.1, §8).
 
 ### Status
-**AWAITING CO-FOUNDER REVIEW.** On approval, pull **T-002 — Define the domain model
-(v1)** from `05_NEXT_TASKS.md`.
+**AWAITING CO-FOUNDER REVIEW.** On approval, next is **M2 — Authentication** — which is
+**gated on an approved Authentication Design Review before any code** (05_NEXT_TASKS.md
+T-013): identity model, token lifecycle, refresh rotation, role/permission strategy,
+account states, password reset, email/OTP, sessions, audit events, future external IdPs.
 
 ---
 

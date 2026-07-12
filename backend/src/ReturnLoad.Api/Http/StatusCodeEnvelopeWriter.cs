@@ -20,6 +20,18 @@ public static class StatusCodeEnvelopeWriter
 
         (string code, string message) = Describe(status);
 
+        // Surface authn/authz failures as security events for alerting.
+        if (status is StatusCodes.Status401Unauthorized or StatusCodes.Status403Forbidden)
+        {
+            SecurityLog.Write(
+                httpContext,
+                status == StatusCodes.Status401Unauthorized ? "AuthenticationFailed" : "AccessForbidden",
+                "{Code} on {Method} {Path}",
+                code,
+                httpContext.Request.Method,
+                httpContext.Request.Path);
+        }
+
         ApiResponse<object> body = ApiResponse<object>
             .Fail(ApiError.General(code, message), message)
             .WithTraceId(httpContext.GetCorrelationId());
@@ -34,7 +46,9 @@ public static class StatusCodeEnvelopeWriter
         StatusCodes.Status403Forbidden => (ErrorCodes.Forbidden, "You do not have permission to access this resource."),
         StatusCodes.Status404NotFound => (ErrorCodes.NotFound, "The requested resource was not found."),
         StatusCodes.Status405MethodNotAllowed => (ErrorCodes.ValidationError, "The HTTP method is not allowed for this resource."),
+        StatusCodes.Status413PayloadTooLarge => (ErrorCodes.PayloadTooLarge, "The request body is too large."),
         StatusCodes.Status415UnsupportedMediaType => (ErrorCodes.ValidationError, "The request media type is not supported."),
+        StatusCodes.Status429TooManyRequests => (ErrorCodes.TooManyRequests, "Too many requests — please retry later."),
         >= 500 => (ErrorCodes.InternalError, "An unexpected error occurred."),
         _ => (ErrorCodes.ValidationError, "The request could not be processed."),
     };

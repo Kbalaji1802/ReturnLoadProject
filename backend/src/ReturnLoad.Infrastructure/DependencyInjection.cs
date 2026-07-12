@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using ReturnLoad.Application.Abstractions.Storage;
 using ReturnLoad.Infrastructure.Persistence;
+using ReturnLoad.Infrastructure.Storage;
 using ReturnLoad.Shared.Diagnostics;
 
 namespace ReturnLoad.Infrastructure;
@@ -39,6 +41,11 @@ public static class DependencyInjection
             .AddDbContextCheck<ApplicationDbContext>(
                 name: "database",
                 tags: [HealthCheckTags.Ready]);
+
+        // File storage (ADR-0012): local disk by default; a cloud provider swaps in here
+        // later without touching business code.
+        services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));
+        services.AddSingleton<IFileStorageService, LocalDiskFileStorageService>();
 
         return services;
     }

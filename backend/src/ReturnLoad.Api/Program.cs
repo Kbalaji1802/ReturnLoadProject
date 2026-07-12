@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
+using ReturnLoad.Api.Configuration;
 using ReturnLoad.Api.Extensions;
 using ReturnLoad.Api.Http;
 using ReturnLoad.Api.Hubs;
@@ -25,12 +27,33 @@ try
         .ReadFrom.Services(services)
         .Enrich.FromLogContext());
 
+    // Hardening options read up front — needed for Kestrel limits and pipeline gating (M1.5).
+    SecurityHeaderOptions security = builder.Configuration
+        .GetSection(SecurityHeaderOptions.SectionName).Get<SecurityHeaderOptions>() ?? new SecurityHeaderOptions();
+    RequestLimitOptions requestLimits = builder.Configuration
+        .GetSection(RequestLimitOptions.SectionName).Get<RequestLimitOptions>() ?? new RequestLimitOptions();
+
+    builder.WebHost.ConfigureKestrel(kestrel =>
+    {
+        kestrel.AddServerHeader = false;                              // don't advertise the server
+        kestrel.Limits.MaxRequestBodySize = requestLimits.MaxRequestBodyBytes;
+    });
+
+    // Trust the reverse proxy's X-Forwarded-* so scheme/IP are correct behind ingress.
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+    });
+
     // ---- Service registration (composition root) ------------------------------
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
 
     builder.Services.AddControllers();
     builder.Services.AddApiFoundation();
+    builder.Services.AddSecurityFoundation(builder.Configuration);
     builder.Services.AddApiVersioningConfigured();
     builder.Services.AddSwaggerConfigured();
     builder.Services.AddJwtAuthentication(builder.Configuration);
@@ -47,13 +70,31 @@ try
     WebApplication app = builder.Build();
 
     // ---- HTTP pipeline --------------------------------------------------------
-    // Order matters: the exception handler is outermost so it catches everything;
-    // correlation runs next so every log line and response carries the ids; the
-    // status-code handler then envelopes framework errors (401/403/404/...) that
-    // never reach MVC (ADR-0008).
+    // Order matters (M1.5 + ADR-0008): forwarded headers first so scheme/IP are correct;
+    // the exception handler wraps everything; transport hardening (HSTS/HTTPS) and
+    // security headers apply before app logic; correlation runs so every log line and
+    // response carries the ids; the status-code handler envelopes framework errors
+    // (401/403/404/429/…); the rate limiter guards downstream work.
+    app.UseForwardedHeaders();
     app.UseExceptionHandler();
+
+    if (!app.Environment.IsDevelopment())
+    {
+        if (security.Hsts)
+        {
+            app.UseHsts();
+        }
+
+        if (security.HttpsRedirection)
+        {
+            app.UseHttpsRedirection();
+        }
+    }
+
+    app.UseMiddleware<SecurityHeadersMiddleware>();
     app.UseMiddleware<CorrelationIdMiddleware>();
     app.UseStatusCodePages(StatusCodeEnvelopeWriter.WriteAsync);
+    app.UseRateLimiter();
     app.UseSerilogRequestLogging();
 
     if (app.Environment.IsDevelopment())
@@ -62,6 +103,7 @@ try
         app.UseSwaggerUI();
     }
 
+    app.UseCors(SecurityExtensions.CorsPolicyName);
     app.UseAuthentication();
     app.UseAuthorization();
 

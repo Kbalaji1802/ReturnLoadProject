@@ -23,6 +23,12 @@ public static class ErrorCodes
     /// <summary>The request conflicts with the current state (HTTP 409).</summary>
     public const string Conflict = "CONFLICT";
 
+    /// <summary>The request body exceeds the configured limit (HTTP 413).</summary>
+    public const string PayloadTooLarge = "PAYLOAD_TOO_LARGE";
+
+    /// <summary>The caller exceeded the rate limit (HTTP 429).</summary>
+    public const string TooManyRequests = "TOO_MANY_REQUESTS";
+
     /// <summary>An unexpected, unhandled error (HTTP 500).</summary>
     public const string InternalError = "INTERNAL_ERROR";
 }

@@ -161,6 +161,35 @@ default 20, **hard cap 100**) and return `PagedResult<T>` as the `data` payload:
 - **Rate limiting + audit logging** on auth and settlement.
 - **Dependency and secret scanning** in CI.
 
+### 7.1 Security Foundation (M1.5, ADR-0010)
+
+Platform hardening delivered before any endpoint exists. All config-driven; the
+in-app controls complement (do not replace) TLS/WAF at the ingress.
+
+- **Security headers** on every response: `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+  `X-Permitted-Cross-Domain-Policies: none`, and a restrictive
+  `Content-Security-Policy` (`default-src 'none'; frame-ancestors 'none'`; relaxed only
+  for the Swagger UI path in Development). The `Server` banner is suppressed.
+- **HTTPS**: `UseHttpsRedirection` + HSTS outside Development (config-gated
+  `Security:HttpsRedirection` / `Security:Hsts`); `UseForwardedHeaders` honours the
+  proxy's `X-Forwarded-Proto`/`-For`.
+- **CORS**: explicit config-driven allowlist (`Cors:AllowedOrigins`); empty = no
+  cross-origin browser access. Correlation headers are exposed.
+- **Rate limiting**: ASP.NET Core rate limiter, fixed window per client IP
+  (`RateLimiting:Global`), plus a stricter `sensitive` policy reserved for M2 auth
+  endpoints. Rejections return the **429 envelope** and log a security event.
+- **Request limits**: Kestrel `MaxRequestBodyBytes` (`RequestLimits`, default 10 MB).
+- **File uploads**: size + MIME + extension allowlists (`FileUpload`), enforced by
+  `FileUploadValidator`. Storage backend is abstracted (`IFileStorageService`, ADR-0012).
+- **JWT config**: validation parameters bound from `Jwt` with **fail-fast** validation
+  (`JwtOptionsValidator`) — a non-Development host will not start without Issuer /
+  Audience / SigningKey. **No token issuance until M2.**
+- **Password policy**: `PasswordPolicyOptions` (min 12, all character classes) —
+  values only; enforced by the Identity module (M2).
+- **Security logging**: authn/authz failures (401/403) and rate-limit hits (429) are
+  logged with a `SecurityEvent` property for alerting (§10).
+
 ## 8. Environments
 
 | Env | Purpose | Data |
@@ -171,6 +200,12 @@ default 20, **hard cap 100**) and return `PagedResult<T>` as the `data` payload:
 
 - **Configuration via environment variables**; never hard-coded.
 - **`.env.example`** documents every required variable; real `.env` is git-ignored.
+- **Secret-management strategy (M1.5):** secrets (JWT signing key, DB credentials)
+  come from environment variables today; the host **fails fast** if a required secret
+  is missing outside Development (`JwtOptionsValidator`, `AddInfrastructure`). A managed
+  secret store (e.g. cloud KMS / Key Vault) is deferred to the open cloud decision
+  (§11) and will become its own ADR — no code change to consumers, which read
+  `IConfiguration`.
 
 ## 9. Quality gates (CI/CD)
 
