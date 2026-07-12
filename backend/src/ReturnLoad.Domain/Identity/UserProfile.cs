@@ -22,12 +22,16 @@ public sealed class UserProfile : AggregateRoot<Guid>
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
 
+    private UserProfile()
+    {
+    }
+
     /// <summary>Links to the authentication account (Infrastructure ApplicationUser).</summary>
     public Guid AuthUserId { get; }
 
-    public string FullName { get; private set; }
+    public string FullName { get; private set; } = null!;
 
-    public MobileNumber Mobile { get; private set; }
+    public MobileNumber Mobile { get; private set; } = null!;
 
     public EmailAddress? Email { get; private set; }
 

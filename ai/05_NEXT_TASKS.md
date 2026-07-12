@@ -17,8 +17,8 @@ Coarse, communication-friendly milestones, each owned by one **bounded context**
 | **M1.5** | **Security Foundation** — headers, HTTPS, CORS, rate limiting, size/upload/MIME limits, JWT config (no login), secret strategy, password policy, security logging, abuse protection | Platform | ⏭️ **Next** (ADR-0010) |
 | **M2** | **Authentication** — identity, JWT, refresh tokens, roles, permissions, authorization policies | Identity | ✅ Done (ADR-0013) |
 | **M3** | **Core Domain Model** — all business aggregates, value objects, enums, domain events (Domain layer only) | All | ✅ Done (ADR-0014) |
-| **M3.5** | **Persistence** — EF Core configurations + migration for the M3 model; repositories | All | ⏭️ **Next (recommended)** |
-| **M4** | Driver (application/API on the domain) | Fleet/Identity | ⬜ |
+| **M3.5** | **Persistence** — EF Core configurations + migration for the M3 model; repositories; encryption; concurrency | All | ✅ Done (ADR-0015) |
+| **M4** | **Identity & Onboarding APIs** — Carrier/UserProfile/Driver registration + verification flows on the persisted model | Identity/Fleet | ⏭️ **Next (recommended)** |
 | **M5** | Vehicle | Fleet | ⬜ |
 | **M6** | Documents (KYC / RC / insurance / licence / permit) — uses `IFileStorageService` (ADR-0012) | Documents | ⬜ |
 | **M7** | GPS / location | Tracking | ⬜ |

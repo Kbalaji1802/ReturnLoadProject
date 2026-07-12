@@ -7,37 +7,42 @@
 
 ## Active task
 
-**M3 — Core Domain Model** — ✅ **COMPLETE, awaiting review.**
-(Decisions in **ADR-0014**. Prior: M0 ✅, M1 ✅/ADR-0008, M1.5 ✅/ADR-0010, M2 ✅/ADR-0013.)
+**M3.5 — Persistence Foundation** — ✅ **COMPLETE, awaiting review.**
+(Decisions in **ADR-0015**. Prior: M0–M3 ✅; M3 domain model = ADR-0014.)
 
 ### Goal
-Build the business domain model (§12 / T-002) across all bounded contexts, in the
-**Domain layer only** — no APIs, controllers, services, EF configs, migrations, matching,
-GPS, payments, or notifications delivery.
+Persist every M3 aggregate with EF Core + PostgreSQL — mapping, security, integrity —
+with **no business logic, APIs, or UI**.
 
-### Delivered (`backend/src/ReturnLoad.Domain`)
-- **Building blocks:** `AggregateRoot<TId>` (+ domain events), `ValueObject`,
-  `DomainException`, `Guard`, `IDomainEvent`.
-- **Value objects:** MobileNumber, EmailAddress, Money (INR), Weight, Distance,
-  GeoCoordinate, Location, TimeWindow, DrivingLicenceNumber, AadhaarNumber (masked),
-  GstNumber, VehicleRegistrationNumber, VehicleCapacity, LoadRequirement, ReturnLeg,
-  LocationPoint, Rating.
-- **Aggregates by context:** Identity (UserProfile, Carrier, DriverProfile, Dispatcher,
-  Association) · Fleet (Vehicle) · Documents (Document) · Loads (Load) · Trips (Trip) ·
-  Tracking (TrackingEvent) · Reviews (Review) · Administration (AuditLog, Notification).
-- **Enums** for every business state; **domain events** (DriverRegistered/Verified,
-  VehicleRegistered, DocumentUploaded/Verified, LoadCreated/Posted, TripCreated/Started/
-  Completed, CarrierRegistered).
-- **Tests:** 138 green total (**110 unit** incl. new domain invariants/VO/rule tests, 18
-  integration, 10 architecture — new: value objects sealed + in Domain; events in Domain).
+### Delivered
+- **EF configurations** for all 13 aggregates (Infrastructure): value converters for
+  single-value VOs, owned types for multi-field VOs (incl. nested `ReturnLeg`), enums as
+  text.
+- **Security:** Aadhaar **encrypted at rest** (AES-GCM `IFieldEncryptor`; key from secret
+  store). Sensitive file identifiers reference storage keys only (ADR-0012).
+- **Integrity conventions** via shadow props + SaveChanges interceptor: **soft delete**
+  (+ global query filter), **audit** fields, **app-managed `Version` concurrency token**.
+- **Indexes:** unique (Mobile, Email, Registration, Licence, AuthUserId); normal (Driver/
+  Vehicle/Load/Trip status); composite (Tracking `TripId+CapturedAtUtc`, `Driver+Vehicle`,
+  Load `Shipper+Status`, Document `Owner`, etc.). **FKs** on every aggregate reference.
+- **Repositories:** `IRepository<T>` + `IUnitOfWork` (Application) with EF implementations
+  (Infrastructure).
+- **Migration** `M3_5_Persistence` — 13 tables, symmetric `Down`; SQL script generates.
+- **Tests:** **146 green** (110 unit, 26 integration incl. 8 SQLite persistence tests —
+  mapping/VO/enum/encryption/uniqueness/FK/concurrency/soft-delete — 10 architecture).
 
-### Explicitly NOT built (by instruction)
-Controllers/APIs/services/UI, EF configurations, migrations, repositories, matching, GPS,
-payments, notification delivery.
+### NOT built (by instruction)
+Driver/Vehicle/Load APIs, services, GPS, matching, payments, notifications delivery,
+Flutter, Angular.
+
+### Known follow-ups (deferred, honest)
+- Live PostgreSQL apply/rollback + a real-DB integration run → local Docker env (T-010);
+  the migration SQL is generated and mapping is proven on SQLite.
+- Geo pickup/drop indexing → PostGIS spatial indexes in the geo/matching milestone.
 
 ### Status
-**AWAITING CO-FOUNDER REVIEW.** Recommended next: **persist the domain** — EF Core
-configurations + migration for these entities (see `05_NEXT_TASKS.md`).
+**AWAITING CO-FOUNDER REVIEW.** Recommended next: **M4 — Identity & Onboarding APIs**
+(application/API layer for Carrier/Driver/UserProfile on the now-persisted model).
 
 ---
 

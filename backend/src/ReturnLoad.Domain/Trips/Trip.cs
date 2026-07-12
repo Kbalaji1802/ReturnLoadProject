@@ -36,17 +36,21 @@ public sealed class Trip : AggregateRoot<Guid>
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
 
+    private Trip()
+    {
+    }
+
     public Guid CarrierId { get; }
 
     public Guid VehicleId { get; }
 
     public Guid DriverProfileId { get; }
 
-    public Location Origin { get; }
+    public Location Origin { get; } = null!;
 
-    public Location Destination { get; }
+    public Location Destination { get; } = null!;
 
-    public ReturnLeg ReturnLeg { get; private set; }
+    public ReturnLeg ReturnLeg { get; private set; } = null!;
 
     public TripStatus Status { get; private set; }
 

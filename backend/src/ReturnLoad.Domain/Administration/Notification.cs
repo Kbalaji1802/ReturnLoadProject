@@ -23,13 +23,17 @@ public sealed class Notification : AggregateRoot<Guid>
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
 
+    private Notification()
+    {
+    }
+
     public Guid RecipientUserProfileId { get; }
 
     public NotificationChannel Channel { get; }
 
-    public string Subject { get; }
+    public string Subject { get; } = null!;
 
-    public string Body { get; }
+    public string Body { get; } = null!;
 
     public NotificationStatus Status { get; private set; }
 

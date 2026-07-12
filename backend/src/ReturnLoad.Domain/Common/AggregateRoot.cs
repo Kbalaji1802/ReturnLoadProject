@@ -18,6 +18,11 @@ public abstract class AggregateRoot<TId> : BaseEntity<TId>
     {
     }
 
+    /// <summary>Parameterless constructor for EF Core materialization only.</summary>
+    protected AggregateRoot()
+    {
+    }
+
     /// <summary>Events raised by this aggregate since it was loaded, in order.</summary>
     public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 

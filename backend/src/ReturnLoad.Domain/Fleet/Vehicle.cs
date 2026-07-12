@@ -29,13 +29,17 @@ public sealed class Vehicle : AggregateRoot<Guid>
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
 
+    private Vehicle()
+    {
+    }
+
     public Guid CarrierId { get; }
 
-    public VehicleRegistrationNumber Registration { get; private set; }
+    public VehicleRegistrationNumber Registration { get; private set; } = null!;
 
     public VehicleType Type { get; private set; }
 
-    public VehicleCapacity Capacity { get; private set; }
+    public VehicleCapacity Capacity { get; private set; } = null!;
 
     public VehicleStatus Status { get; private set; }
 

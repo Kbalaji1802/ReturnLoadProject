@@ -13,7 +13,12 @@ public abstract class BaseEntity<TId>
 {
     protected BaseEntity(TId id) => Id = id;
 
-    public TId Id { get; protected set; }
+    /// <summary>Parameterless constructor for the persistence layer (EF Core materialization) only.</summary>
+    protected BaseEntity()
+    {
+    }
+
+    public TId Id { get; protected set; } = default!;
 
     public override bool Equals(object? obj) =>
         obj is BaseEntity<TId> other

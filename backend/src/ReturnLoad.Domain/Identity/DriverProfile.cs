@@ -24,9 +24,13 @@ public sealed class DriverProfile : AggregateRoot<Guid>
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
 
+    private DriverProfile()
+    {
+    }
+
     public Guid UserProfileId { get; }
 
-    public DrivingLicenceNumber Licence { get; private set; }
+    public DrivingLicenceNumber Licence { get; private set; } = null!;
 
     /// <summary>Optional KYC identifier — sensitive PII (see <see cref="AadhaarNumber"/>).</summary>
     public AadhaarNumber? Aadhaar { get; private set; }

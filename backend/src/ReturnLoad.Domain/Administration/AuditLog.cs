@@ -35,11 +35,15 @@ public sealed class AuditLog : AggregateRoot<Guid>
         OccurredAtUtc = DateTimeOffset.UtcNow;
     }
 
+    private AuditLog()
+    {
+    }
+
     /// <summary>Who performed the action (user id or system identifier).</summary>
-    public string Actor { get; }
+    public string Actor { get; } = null!;
 
     /// <summary>What happened (e.g. <c>DocumentVerified</c>, <c>DriverBlocked</c>).</summary>
-    public string Action { get; }
+    public string Action { get; } = null!;
 
     public string? SubjectType { get; }
 

@@ -21,9 +21,13 @@ public sealed class Carrier : AggregateRoot<Guid>
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
 
-    public string LegalName { get; private set; }
+    private Carrier()
+    {
+    }
 
-    public MobileNumber Contact { get; private set; }
+    public string LegalName { get; private set; } = null!;
+
+    public MobileNumber Contact { get; private set; } = null!;
 
     public GstNumber? Gst { get; private set; }
 

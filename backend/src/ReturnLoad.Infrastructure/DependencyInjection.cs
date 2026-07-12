@@ -3,10 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ReturnLoad.Application.Abstractions.Identity;
+using ReturnLoad.Application.Abstractions.Persistence;
+using ReturnLoad.Application.Abstractions.Security;
 using ReturnLoad.Application.Abstractions.Storage;
 using ReturnLoad.Infrastructure.Identity;
 using ReturnLoad.Infrastructure.Identity.Tokens;
 using ReturnLoad.Infrastructure.Persistence;
+using ReturnLoad.Infrastructure.Security;
 using ReturnLoad.Infrastructure.Storage;
 using ReturnLoad.Shared.Configuration;
 using ReturnLoad.Shared.Diagnostics;
@@ -39,7 +42,15 @@ public static class DependencyInjection
                 "configuration or the ConnectionStrings__ReturnLoadDatabase environment variable.");
         }
 
+        // Field encryption for sensitive columns at rest (Aadhaar) — ADR-0015.
+        services.Configure<EncryptionOptions>(configuration.GetSection(EncryptionOptions.SectionName));
+        services.AddSingleton<IFieldEncryptor, AesFieldEncryptor>();
+
         services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql(connectionString));
+
+        // Persistence contracts (ADR-0014/0015): generic repository + unit of work.
+        services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
+        services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<ApplicationDbContext>());
 
         // Readiness probe: the database must be reachable before we accept traffic.
         services.AddHealthChecks()

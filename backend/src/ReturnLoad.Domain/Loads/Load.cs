@@ -37,15 +37,19 @@ public sealed class Load : AggregateRoot<Guid>
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
 
+    private Load()
+    {
+    }
+
     public Guid ShipperId { get; }
 
-    public Location Origin { get; private set; }
+    public Location Origin { get; private set; } = null!;
 
-    public Location Destination { get; private set; }
+    public Location Destination { get; private set; } = null!;
 
-    public TimeWindow PickupWindow { get; private set; }
+    public TimeWindow PickupWindow { get; private set; } = null!;
 
-    public LoadRequirement Requirement { get; private set; }
+    public LoadRequirement Requirement { get; private set; } = null!;
 
     public Money? OfferedPrice { get; private set; }
 

@@ -19,6 +19,10 @@ public sealed class Dispatcher : AggregateRoot<Guid>
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
 
+    private Dispatcher()
+    {
+    }
+
     public Guid UserProfileId { get; }
 
     public Guid CarrierId { get; }

@@ -19,14 +19,18 @@ public sealed class ReturnLeg : ValueObject
         Availability = availability;
     }
 
+    private ReturnLeg()
+    {
+    }
+
     /// <summary>Where the truck becomes empty and available (typically the trip's delivery point).</summary>
-    public Location Origin { get; }
+    public Location Origin { get; private set; } = null!;
 
     /// <summary>Where the truck is heading back to.</summary>
-    public Location Destination { get; }
+    public Location Destination { get; private set; } = null!;
 
     /// <summary>When the truck is available to carry a return load.</summary>
-    public TimeWindow Availability { get; }
+    public TimeWindow Availability { get; private set; } = null!;
 
     public static ReturnLeg Create(Location origin, Location destination, TimeWindow availability)
     {

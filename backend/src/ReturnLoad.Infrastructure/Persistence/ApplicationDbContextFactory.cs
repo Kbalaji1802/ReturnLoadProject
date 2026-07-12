@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using ReturnLoad.Infrastructure.Security;
 
 namespace ReturnLoad.Infrastructure.Persistence;
 
@@ -17,6 +18,6 @@ public sealed class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Ap
                 .UseNpgsql("Host=localhost;Port=5432;Database=returnload_design;Username=design;Password=design")
                 .Options;
 
-        return new ApplicationDbContext(options);
+        return new ApplicationDbContext(options, new NoOpFieldEncryptor());
     }
 }

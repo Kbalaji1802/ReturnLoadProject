@@ -10,6 +10,10 @@
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="9.0.*" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.*" />
+    <!-- SQLite for real relational persistence tests (unique indexes, FKs, concurrency).
+         Test-only; production is PostgreSQL. The SQLite native lib carries an advisory not
+         reachable in our controlled test process — suppressed here per ADR-0015. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.*" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
@@ -21,6 +25,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ReturnLoad.Api\ReturnLoad.Api.csproj" />
+  </ItemGroup>
+
+  <!-- ADR-0015: the SQLite native lib (SQLitePCLRaw) advisory is not reachable in the test
+       harness; production uses PostgreSQL. Suppressed for this test project only. -->
+  <ItemGroup>
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2m69-gcr7-jv3q" />
   </ItemGroup>
 
 </Project>

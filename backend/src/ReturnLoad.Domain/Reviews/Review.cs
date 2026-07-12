@@ -24,13 +24,17 @@ public sealed class Review : AggregateRoot<Guid>
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
 
+    private Review()
+    {
+    }
+
     public Guid TripId { get; }
 
     public Guid AuthorUserProfileId { get; }
 
     public Guid SubjectUserProfileId { get; }
 
-    public Rating Rating { get; private set; }
+    public Rating Rating { get; private set; } = null!;
 
     public string? Comment { get; private set; }
 

@@ -23,6 +23,10 @@ public sealed class Association : AggregateRoot<Guid>
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
 
+    private Association()
+    {
+    }
+
     public Guid CarrierId { get; }
 
     public Guid MemberUserProfileId { get; }

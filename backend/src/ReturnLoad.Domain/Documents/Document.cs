@@ -36,6 +36,10 @@ public sealed class Document : AggregateRoot<Guid>
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
 
+    private Document()
+    {
+    }
+
     public DocumentOwnerType OwnerType { get; }
 
     public Guid OwnerId { get; }
@@ -43,7 +47,7 @@ public sealed class Document : AggregateRoot<Guid>
     public DocumentType Type { get; }
 
     /// <summary>Key into file storage (ADR-0012); the raw file is never held in the domain.</summary>
-    public string StorageKey { get; private set; }
+    public string StorageKey { get; private set; } = null!;
 
     /// <summary>The document's own number (RC number, policy number, DL number, …), if any.</summary>
     public string? DocumentNumber { get; private set; }

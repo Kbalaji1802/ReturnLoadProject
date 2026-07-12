@@ -29,11 +29,15 @@ public sealed class TrackingEvent : AggregateRoot<Guid>
         RecordedAtUtc = recordedAtUtc;
     }
 
+    private TrackingEvent()
+    {
+    }
+
     public Guid TripId { get; }
 
     public TrackingEventType Type { get; }
 
-    public LocationPoint Point { get; }
+    public LocationPoint Point { get; } = null!;
 
     /// <summary>The device's real capture time — never the upload time (offline truthfulness).</summary>
     public DateTimeOffset CapturedAtUtc { get; }

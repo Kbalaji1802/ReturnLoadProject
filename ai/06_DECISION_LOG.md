@@ -23,6 +23,46 @@
 
 ---
 
+## ADR-0015 — Persistence foundation (M3.5): EF Core mapping, encryption, concurrency
+- **Date:** 2026-07-12
+- **Status:** Accepted
+- **Context:** M3.5 persists every M3 aggregate with EF Core + Npgsql (no business logic,
+  APIs, or UI), keeping the domain persistence-ignorant (ADR-0006/0014).
+- **Decision:**
+  1. **Mapping in Infrastructure:** one `IEntityTypeConfiguration<T>` per aggregate;
+     single-value value objects via **value converters** (indexable columns), multi-field
+     VOs via **owned types** (`OwnsOne`, incl. nested `ReturnLeg`); enums stored as **text**.
+     EF materialises through private parameterless constructors added to aggregates/VOs
+     (the only domain change — behaviour is unaffected; factories remain the creation path).
+  2. **Cross-cutting via shadow properties + a SaveChanges interceptor** (no domain
+     pollution): soft delete (`IsDeleted` + global query filter; deletes become updates),
+     audit (`CreatedBy`/`UpdatedBy`/`UpdatedAtUtc`; created-at is a domain property), and
+     an **application-managed `Version` concurrency token** — chosen over SQL Server
+     `rowversion`/Npgsql `xmin` because it is **provider-portable** (works on Postgres and
+     the SQLite test DB) and testable.
+  3. **Encryption at rest:** Aadhaar is stored via an AES-GCM `IFieldEncryptor` value
+     converter (Trust & Safety §1; 01_PROJECT_RULES.md §5/§6); the key comes from the
+     secret store (`Encryption:Key`), never committed. One `Documents` table serves all
+     owners via `OwnerType` (unifies "DriverDocument"/"VehicleDocument"). `VehicleType` is
+     an enum column, not a lookup table (it is a domain enum, ADR-0014).
+  4. **Repositories:** generic `IRepository<T>` + `IUnitOfWork` in Application, EF
+     implementations in Infrastructure (aggregate-specific queries arrive per feature
+     milestone). Initial business **migration** `M3_5_Persistence` (13 tables, FKs,
+     unique/normal/composite indexes) with a verified symmetric `Down`.
+  5. **Tests on SQLite in-memory** for genuine relational enforcement (unique indexes, FKs,
+     concurrency) that EF InMemory cannot provide. The SQLite native lib's advisory
+     (GHSA-2m69-gcr7-jv3q) is **suppressed for the test project only** — not shipped;
+     production is PostgreSQL — reversing the M1.5/M2 avoidance with this narrow, documented
+     justification.
+- **Alternatives considered:** JSON columns for all VOs (rejected: can't index pickup/drop
+  or unique fields); `xmin` concurrency (rejected: Npgsql-only, untestable here); splitting
+  Document into two tables (rejected: diverges from the single Document aggregate); EF
+  InMemory for tests (rejected: no constraint/concurrency enforcement).
+- **Consequences:** The domain is fully persistable with security and integrity built in.
+  Live apply/rollback + a real-Postgres integration run are deferred to the local Docker
+  env (T-010) — the migration SQL is generated and the mapping is proven on SQLite. Geo
+  pickup/drop indexing will move to PostGIS (spatial) in the geo/matching milestone.
+
 ## ADR-0014 — Core domain model (M3): DDD tactical patterns, guard-clause invariants
 - **Date:** 2026-07-12
 - **Status:** Accepted
