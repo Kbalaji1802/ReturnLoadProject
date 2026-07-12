@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Common build settings come from ..\..\Directory.Build.props -->
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="NetArchTest.Rules" Version="1.3.2" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <!--
+    Reference the three inner layers whose outbound dependencies we police.
+    The API layer is intentionally NOT referenced: it is only ever a *forbidden*
+    target, matched by namespace in the subject assemblies' IL.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ReturnLoad.Domain\ReturnLoad.Domain.csproj" />
+    <ProjectReference Include="..\..\src\ReturnLoad.Application\ReturnLoad.Application.csproj" />
+    <ProjectReference Include="..\..\src\ReturnLoad.Infrastructure\ReturnLoad.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>
