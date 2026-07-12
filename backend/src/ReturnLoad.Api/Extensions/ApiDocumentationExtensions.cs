@@ -1,5 +1,6 @@
 using Asp.Versioning;
 using Microsoft.OpenApi.Models;
+using ReturnLoad.Api.Http;
 
 namespace ReturnLoad.Api.Extensions;
 
@@ -33,6 +34,9 @@ public static class ApiDocumentationExtensions
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(options =>
         {
+            // Every operation documents the standard error envelope (ADR-0008).
+            options.OperationFilter<DefaultResponsesOperationFilter>();
+
             options.SwaggerDoc("v1", new OpenApiInfo
             {
                 Title = "ReturnLoad API",

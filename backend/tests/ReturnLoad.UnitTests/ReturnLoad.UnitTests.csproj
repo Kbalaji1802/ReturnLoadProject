@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\ReturnLoad.Api\ReturnLoad.Api.csproj" />
     <ProjectReference Include="..\..\src\ReturnLoad.Shared\ReturnLoad.Shared.csproj" />
     <ProjectReference Include="..\..\src\ReturnLoad.Domain\ReturnLoad.Domain.csproj" />
   </ItemGroup>

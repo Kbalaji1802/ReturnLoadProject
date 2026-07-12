@@ -96,10 +96,60 @@ Logical modules (not necessarily separate deployables at day one):
 ## 6. API standards
 
 - **REST + JSON** to start; schema-first via **OpenAPI**.
-- **Versioned** (`/api/v1/...`).
-- **Consistent envelopes** for success and error; predictable HTTP status codes.
-- **Idempotency keys** on money-moving and booking endpoints.
-- **Pagination, filtering, sorting** standardized across list endpoints.
+- **Versioned** — URL-segment `/api/v{version}/...`, default `v1`.
+- **Idempotency keys** on money-moving and booking endpoints (contract reserved;
+  implemented with the settlement/booking modules).
+- **Filtering & sorting** standardized across list endpoints (added per module).
+
+The concrete contract below is delivered by **M1 — API Foundation** and locked by
+**ADR-0008**. Every endpoint inherits it automatically.
+
+### 6.1 Response envelope (success *and* error — one shape)
+
+Every response uses the same envelope, serialised camelCase:
+
+```jsonc
+// success
+{ "success": true,  "message": "", "data": { /* payload */ }, "errors": [], "traceId": "…" }
+// error
+{ "success": false, "message": "Validation failed.", "data": null,
+  "errors": [ { "field": "email", "code": "INVALID_EMAIL", "message": "Email format is invalid." } ],
+  "traceId": "…" }
+```
+
+- `success` — outcome flag. `data` is populated on success and `null` on error;
+  `errors` is empty on success and populated on error.
+- Each error is `{ field?, code, message }` — `field` is null for non-field errors;
+  `code` is a stable machine code (see `ReturnLoad.Shared.Api.ErrorCodes`).
+- **Enforced globally**: controllers return bare DTOs and a result filter wraps them;
+  `[SkipResponseEnvelope]` opts out for rare raw responses (file downloads, webhooks).
+- Errors from *every* layer follow suit: model validation → 400, `UseStatusCodePages`
+  envelopes framework 401/403/404/405, and unhandled exceptions → 500. RFC 7807
+  ProblemDetails is **not** used on the wire (ADR-0008).
+
+### 6.2 HTTP status codes
+
+`200/201` success · `400` validation · `401` unauthenticated · `403` forbidden ·
+`404` not found · `409` conflict · `500` unexpected. The `Result`/`Error` domain
+type maps to these via `ResultExtensions.ToApiResult()`.
+
+### 6.3 Request correlation (observability §10)
+
+- `X-Correlation-ID` — accepted from the caller or generated; **echoed on the
+  response** and used as the envelope `traceId` (the id a user quotes to support).
+- `X-Request-ID` — unique per HTTP request.
+- W3C `TraceId` (from `Activity`) — kept in logs for distributed tracing.
+- All are pushed to the Serilog `LogContext`, so every log line for a request
+  carries them.
+
+### 6.4 Pagination (one shape everywhere)
+
+List endpoints take `?page=&pageSize=` (`PaginationQuery`: page ≥ 1, pageSize
+default 20, **hard cap 100**) and return `PagedResult<T>` as the `data` payload:
+
+```jsonc
+{ "page": 1, "pageSize": 20, "totalRecords": 250, "totalPages": 13, "items": [ … ] }
+```
 
 ## 7. Security architecture
 

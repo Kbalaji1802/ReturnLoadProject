@@ -23,6 +23,59 @@
 
 ---
 
+## ADR-0009 — Adopt milestone naming (M0–M9) for delivery
+- **Date:** 2026-07-12
+- **Status:** Accepted
+- **Context:** The backlog used fine-grained task IDs (`T-0xx`). For communicating
+  progress to future collaborators and investors, a coarser, product-shaped
+  vocabulary reads more naturally and makes "where are we?" answerable in one line.
+- **Decision:** Track delivery as **milestones**: **M0** Bootstrap, **M1** API
+  Foundation, **M2** Authentication, **M3** User, **M4** Driver, **M5** Vehicle,
+  **M6** Documents, **M7** GPS, **M8** Loads, **M9** Matching. The detailed `T-0xx`
+  backlog in `05_NEXT_TASKS.md` remains as the execution-level breakdown beneath the
+  milestones. **M0 = done** (bootstrap, ADR-0006); **M1 = done** (this ADR-0008);
+  **M2 Authentication = next.**
+- **Alternatives considered:** Keep only `T-0xx` ids (rejected: not communication-
+  friendly for non-engineers); replace `T-0xx` entirely (rejected: loses useful
+  task-level granularity we already rely on).
+- **Consequences:** One shared roadmap vocabulary. Milestones map to `T-0xx` items,
+  so nothing is lost. Authentication (M2) was deliberately deferred behind M1 so its
+  endpoints inherit the API contract from day one.
+
+## ADR-0008 — Unified response envelope for the entire API (supersedes ProblemDetails)
+- **Date:** 2026-07-12
+- **Status:** Accepted
+- **Context:** `03_TECHNICAL_BIBLE.md` §6 called for "consistent envelopes for
+  success **and** error", but the T-001 scaffolding returned a success envelope for
+  200s and **RFC 7807 ProblemDetails** for errors — two shapes. Before the first
+  business feature (M2 Authentication) exposes any endpoint, the API needs one
+  contract every future endpoint inherits automatically. This is milestone **M1**.
+- **Decision:** **Every** response — success and error, including framework-level
+  400/401/403/404/405/500 — uses one envelope:
+  `{ success, message, data, errors[], traceId }`, where each error is
+  `{ field?, code, message }`. Enforced by **automatic global wrapping** (an MVC
+  result filter wraps any bare controller return; an opt-out attribute exists for
+  rare raw responses). The model-validation 400, the status-code handler
+  (`UseStatusCodePages`), and the exception handler all emit the same envelope.
+  **Request correlation** (`X-Correlation-ID` in/out, `X-Request-ID`, W3C trace id,
+  Serilog-enriched) populates `traceId`. **Pagination** is one shape everywhere
+  (`page, pageSize, totalRecords, totalPages, items`, capped at 100/page).
+  **Versioning** stays URL-segment `/api/v1`. This **supersedes** the ProblemDetails
+  approach on the wire; `AddProblemDetails()` remains registered only as the inert
+  framework fallback and is never emitted.
+- **Alternatives considered:** Keep RFC 7807 ProblemDetails for errors (rejected:
+  two shapes, contradicts the "one shape" goal and complicates every mobile/admin
+  client); envelope-with-ProblemDetails via content negotiation (rejected: extra
+  machinery for a hypothetical third-party consumer we do not have); explicit
+  per-endpoint wrapping helpers (rejected: relies on discipline; a global filter
+  makes forgetting impossible).
+- **Consequences:** One deserialisation path for all clients; a failure is never
+  structurally different from a success; every response is traceable by `traceId`.
+  Trade-off: we give up RFC 7807 interop with generic API tooling — acceptable for a
+  first-party mobile/admin API, and revisitable via a new ADR if we later publish a
+  public/partner API. No new NuGet dependencies were added. Contract detailed in
+  `03_TECHNICAL_BIBLE.md` §6.
+
 ## ADR-0007 — Defer AutoMapper from the foundation (security + licensing)
 - **Date:** 2026-07-11
 - **Status:** Accepted

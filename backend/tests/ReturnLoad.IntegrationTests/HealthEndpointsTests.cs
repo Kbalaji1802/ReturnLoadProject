@@ -19,7 +19,7 @@ public sealed class HealthEndpointsTests : IClassFixture<ReturnLoadApiFactory>
     }
 
     [Fact]
-    public async Task Versioned_health_endpoint_returns_a_healthy_payload()
+    public async Task Versioned_health_endpoint_returns_a_healthy_payload_in_the_envelope()
     {
         HttpClient client = _factory.CreateClient();
 
@@ -27,6 +27,8 @@ public sealed class HealthEndpointsTests : IClassFixture<ReturnLoadApiFactory>
 
         response.EnsureSuccessStatusCode();
         string body = await response.Content.ReadAsStringAsync();
+        // The bare controller payload must arrive auto-wrapped in the standard envelope.
+        Assert.Contains("\"success\":true", body);
         Assert.Contains("Healthy", body);
         Assert.Contains("ReturnLoad.Api", body);
     }

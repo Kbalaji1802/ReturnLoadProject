@@ -14,17 +14,21 @@ namespace ReturnLoad.Api.Controllers;
 [Route("api/v{version:apiVersion}/health")]
 public sealed class HealthController : ControllerBase
 {
-    /// <summary>Reports that the API process is up and serving requests.</summary>
+    /// <summary>
+    /// Reports that the API process is up and serving requests. Returns the bare
+    /// payload; the global <c>ResponseEnvelopeResultFilter</c> wraps it in the
+    /// standard <see cref="ApiResponse{TData}"/> envelope (ADR-0008).
+    /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponse<HealthStatusResponse>), StatusCodes.Status200OK)]
-    public ActionResult<ApiResponse<HealthStatusResponse>> Get()
+    public ActionResult<HealthStatusResponse> Get()
     {
         HealthStatusResponse status = new(
             Status: "Healthy",
             Service: "ReturnLoad.Api",
             TimestampUtc: DateTimeOffset.UtcNow);
 
-        return Ok(ApiResponse<HealthStatusResponse>.Ok(status));
+        return Ok(status);
     }
 }
 

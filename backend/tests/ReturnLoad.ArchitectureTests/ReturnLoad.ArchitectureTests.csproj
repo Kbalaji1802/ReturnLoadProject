@@ -24,6 +24,7 @@
     target, matched by namespace in the subject assemblies' IL.
   -->
   <ItemGroup>
+    <ProjectReference Include="..\..\src\ReturnLoad.Api\ReturnLoad.Api.csproj" />
     <ProjectReference Include="..\..\src\ReturnLoad.Domain\ReturnLoad.Domain.csproj" />
     <ProjectReference Include="..\..\src\ReturnLoad.Application\ReturnLoad.Application.csproj" />
     <ProjectReference Include="..\..\src\ReturnLoad.Infrastructure\ReturnLoad.Infrastructure.csproj" />

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using ReturnLoad.Api.Extensions;
+using ReturnLoad.Api.Http;
 using ReturnLoad.Api.Hubs;
 using ReturnLoad.Api.Middleware;
 using ReturnLoad.Application;
@@ -29,19 +30,30 @@ try
     builder.Services.AddInfrastructure(builder.Configuration);
 
     builder.Services.AddControllers();
+    builder.Services.AddApiFoundation();
     builder.Services.AddApiVersioningConfigured();
     builder.Services.AddSwaggerConfigured();
     builder.Services.AddJwtAuthentication(builder.Configuration);
     builder.Services.AddSignalR();
 
-    // Consistent RFC 7807 error responses for unhandled exceptions.
+    // Unhandled exceptions become the standard error envelope (ADR-0008).
+    // GlobalExceptionHandler writes the envelope and returns true, so it fully owns
+    // the response. AddProblemDetails is registered ONLY because UseExceptionHandler()
+    // requires a fallback to exist; it is never emitted on the wire (our handler,
+    // the status-code writer, and the validation factory own every error response).
     builder.Services.AddProblemDetails();
     builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
     WebApplication app = builder.Build();
 
     // ---- HTTP pipeline --------------------------------------------------------
+    // Order matters: the exception handler is outermost so it catches everything;
+    // correlation runs next so every log line and response carries the ids; the
+    // status-code handler then envelopes framework errors (401/403/404/...) that
+    // never reach MVC (ADR-0008).
     app.UseExceptionHandler();
+    app.UseMiddleware<CorrelationIdMiddleware>();
+    app.UseStatusCodePages(StatusCodeEnvelopeWriter.WriteAsync);
     app.UseSerilogRequestLogging();
 
     if (app.Environment.IsDevelopment())

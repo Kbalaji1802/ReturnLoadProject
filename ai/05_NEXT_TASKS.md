@@ -5,6 +5,29 @@
 
 ---
 
+## Milestone map (M0–M9) — the product-shaped roadmap (ADR-0009)
+
+Coarse, communication-friendly milestones. The detailed `T-0xx` items below are the
+execution breakdown beneath them.
+
+| Milestone | Scope | Status |
+|-----------|-------|--------|
+| **M0** | Bootstrap — stack locked, three scaffolds, tests/CI harness | ✅ Done (ADR-0006) |
+| **M1** | **API Foundation** — response envelope, error/validation contract, correlation ids, versioning, pagination | ✅ Done (ADR-0008) |
+| **M2** | **Authentication** — registration, login, tokens, RBAC (inherits the M1 contract) | ⏭️ **Next** |
+| **M3** | User | ⬜ |
+| **M4** | Driver | ⬜ |
+| **M5** | Vehicle | ⬜ |
+| **M6** | Documents (KYC / RC / insurance / licence / permit) | ⬜ |
+| **M7** | GPS / location | ⬜ |
+| **M8** | Loads | ⬜ |
+| **M9** | Matching | ⬜ |
+
+> Authentication (M2) was deliberately sequenced **after** M1 so its endpoints obey
+> the API contract from day one.
+
+---
+
 ## Phase 0 — Decisions (do before coding)
 
 - [~] **T-001 — Lock the stack + bootstrap the foundation.** ✅ Backend framework
@@ -15,8 +38,11 @@
 - [ ] **T-002 — Define the domain model (v1).** Entities and relationships for
       Carrier, Driver, Shipper, Load, Trip, Return Leg, Match, Booking, Bid,
       Settlement, Rating. ERD in `/database` + `/docs`.
-- [ ] **T-003 — Draft the API contract (v1).** OpenAPI skeleton for auth, loads,
-      trips, matching, bookings. Schema-first, no implementation yet.
+- [~] **T-003 — API contract (v1).** ✅ **Foundation delivered by M1** (ADR-0008):
+      response envelope, error/validation contract, correlation ids, pagination,
+      versioning — the shape every endpoint inherits. **Remaining:** the per-module
+      OpenAPI *schemas* (auth, loads, trips, matching, bookings), added with each
+      module.
 
 ## Phase 1 — Foundational engineering
 
@@ -27,8 +53,9 @@
       the CI pipeline** (lint + build + test + dependency/secret scan on every push).
 - [ ] **T-012 — Database migrations (v1).** Implement the T-002 model as versioned
       migrations + seed data.
-- [ ] **T-013 — Identity & Access.** Registration, login, the full role catalogue
-      (`03_TECHNICAL_BIBLE.md` §13), tokens, RBAC middleware.
+- [ ] **T-013 — Identity & Access (= milestone M2, next).** Registration, login, the
+      full role catalogue (`03_TECHNICAL_BIBLE.md` §13), tokens, RBAC middleware.
+      Every endpoint uses the M1 API contract (ADR-0008).
 - [ ] **T-014 — Trust & Safety (verification).** Implement the pre-trip gate from
       `08_TRUST_AND_SAFETY.md`: Document entity, driver KYC, RC / insurance /
       licence / permit verification states, expiry reminders, fraud reports,
