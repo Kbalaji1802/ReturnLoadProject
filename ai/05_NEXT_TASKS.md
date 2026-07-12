@@ -7,24 +7,30 @@
 
 ## Milestone map (M0–M9) — the product-shaped roadmap (ADR-0009)
 
-Coarse, communication-friendly milestones. The detailed `T-0xx` items below are the
-execution breakdown beneath them.
+Coarse, communication-friendly milestones, each owned by one **bounded context**
+(ADR-0011). The detailed `T-0xx` items below are the execution breakdown beneath them.
 
-| Milestone | Scope | Status |
-|-----------|-------|--------|
-| **M0** | Bootstrap — stack locked, three scaffolds, tests/CI harness | ✅ Done (ADR-0006) |
-| **M1** | **API Foundation** — response envelope, error/validation contract, correlation ids, versioning, pagination | ✅ Done (ADR-0008) |
-| **M2** | **Authentication** — registration, login, tokens, RBAC (inherits the M1 contract) | ⏭️ **Next** |
-| **M3** | User | ⬜ |
-| **M4** | Driver | ⬜ |
-| **M5** | Vehicle | ⬜ |
-| **M6** | Documents (KYC / RC / insurance / licence / permit) | ⬜ |
-| **M7** | GPS / location | ⬜ |
-| **M8** | Loads | ⬜ |
-| **M9** | Matching | ⬜ |
+| Milestone | Scope | Context | Status |
+|-----------|-------|---------|--------|
+| **M0** | Bootstrap — stack locked, three scaffolds, tests/CI harness | Platform | ✅ Done (ADR-0006) |
+| **M1** | **API Foundation** — response envelope, error/validation contract, correlation ids, versioning, pagination | Platform | ✅ Done (ADR-0008) |
+| **M1.5** | **Security Foundation** — headers, HTTPS, CORS, rate limiting, size/upload/MIME limits, JWT config (no login), secret strategy, password policy, security logging, abuse protection | Platform | ⏭️ **Next** (ADR-0010) |
+| **M2** | **Authentication** — identity, JWT, refresh tokens, roles, permissions, authorization policies. **No document uploads.** Requires an approved Authentication Design Review first. | Identity | ⬜ (ADR-0010) |
+| **M3** | User | Identity | ⬜ |
+| **M4** | Driver | Fleet | ⬜ |
+| **M5** | Vehicle | Fleet | ⬜ |
+| **M6** | Documents (KYC / RC / insurance / licence / permit) — uses `IFileStorageService` (ADR-0012) | Documents | ⬜ |
+| **M7** | GPS / location | Tracking | ⬜ |
+| **M8** | Loads | Loads | ⬜ |
+| **M9** | Matching | Matching / Trips | ⬜ |
 
-> Authentication (M2) was deliberately sequenced **after** M1 so its endpoints obey
-> the API contract from day one.
+> **Sequencing rationale:** hardening (M1.5) before authentication (M2) means every
+> auth endpoint is born behind the platform's protections. `IFileStorageService`
+> (interfaces only, ADR-0012) is introduced early so the Documents context (M6) plugs
+> into a stable seam — no document *uploads* before M6.
+>
+> **Bounded contexts** (ADR-0011): Identity · Fleet · Loads · Trips · Tracking ·
+> Documents · Billing · Notifications · Administration. Every module belongs to one.
 
 ---
 
@@ -53,9 +59,18 @@ execution breakdown beneath them.
       the CI pipeline** (lint + build + test + dependency/secret scan on every push).
 - [ ] **T-012 — Database migrations (v1).** Implement the T-002 model as versioned
       migrations + seed data.
-- [ ] **T-013 — Identity & Access (= milestone M2, next).** Registration, login, the
-      full role catalogue (`03_TECHNICAL_BIBLE.md` §13), tokens, RBAC middleware.
-      Every endpoint uses the M1 API contract (ADR-0008).
+- [ ] **T-012.5 — Security Foundation (= milestone M1.5, next).** Platform hardening
+      per ADR-0010: security headers, HTTPS redirection, CORS allowlist, rate
+      limiting, request/upload/MIME limits, JWT config (validation only, no login),
+      secret strategy, password-policy config, security logging, abuse protection.
+      Plus `IFileStorageService` interfaces (ADR-0012). No business logic.
+- [ ] **T-013 — Identity & Access (= milestone M2).** Identity, JWT, refresh tokens,
+      roles, permissions, authorization policies (`03_TECHNICAL_BIBLE.md` §13). **No
+      document uploads.** Every endpoint uses the M1 contract (ADR-0008) on the M1.5-
+      hardened platform. **Gate:** an approved *Authentication Design Review* precedes
+      any code (identity model, token lifecycle, refresh rotation, role/permission
+      strategy, account states, password reset, email/OTP, sessions, audit events,
+      future external IdPs).
 - [ ] **T-014 — Trust & Safety (verification).** Implement the pre-trip gate from
       `08_TRUST_AND_SAFETY.md`: Document entity, driver KYC, RC / insurance /
       licence / permit verification states, expiry reminders, fraud reports,

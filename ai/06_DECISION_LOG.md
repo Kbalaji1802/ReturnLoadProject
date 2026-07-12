@@ -23,6 +23,71 @@
 
 ---
 
+## ADR-0012 — File storage abstraction, interfaces-first
+- **Date:** 2026-07-12
+- **Status:** Accepted
+- **Context:** The platform will handle sensitive documents (RC, insurance, licence,
+  permits — the Documents context, M6). The storage backend (local disk / Azure Blob
+  / AWS S3 / MinIO) depends on the still-open cloud decision (`03_TECHNICAL_BIBLE.md`
+  §11). Business code must never couple to a concrete provider.
+- **Decision:** Introduce **`IFileStorageService` now, interfaces only** —
+  `SaveAsync`, `GetAsync`, `DeleteAsync`, `GenerateTemporaryUrl` (signed, time-limited
+  access). A local-disk implementation is acceptable for development; the production
+  backend is chosen later and swapped **without touching business code**. Actual
+  document upload lands in **M6**, not M2.
+- **Alternatives considered:** Wait until M6 (rejected: risks business code coupling
+  to a provider before the abstraction exists); pick a cloud provider now (rejected:
+  cloud is an open §11 decision — see ADR-0003).
+- **Consequences:** Document handling plugs into a stable seam; a provider swap is an
+  infrastructure-only change. Concrete placement (which project/context owns the
+  implementation) is decided when it is implemented.
+
+## ADR-0011 — Adopt bounded contexts for module organisation
+- **Date:** 2026-07-12
+- **Status:** Accepted
+- **Context:** As modules multiply (users, drivers, vehicles, documents, loads,
+  matching…), we need an explicit modularity discipline to keep the modular monolith
+  (ADR-0002) from decaying into a big ball of mud.
+- **Decision:** Organise the domain into **bounded contexts**: **Identity, Fleet,
+  Loads, Trips, Tracking, Documents, Billing, Notifications, Administration**. Every
+  module belongs to exactly one context. Milestone → context map: M2 Auth + M3 User →
+  **Identity**; M4 Driver + M5 Vehicle → **Fleet**; M6 → **Documents**; M7 GPS →
+  **Tracking**; M8 → **Loads**; M9 Matching → **Matching/Trips**; settlement →
+  **Billing**; notifications → **Notifications**; admin console → **Administration**.
+- **Alternatives considered:** Technical-layer-only organisation (rejected: does not
+  scale as the domain grows); microservices now (rejected: premature — stay a modular
+  monolith first, ADR-0002).
+- **Consequences:** Clear ownership and boundaries; a future service split, if ever
+  needed, can follow context lines cheaply. Physical structure (folders / namespaces /
+  projects) is decided per module as it lands.
+
+## ADR-0010 — Security Foundation (M1.5) precedes Authentication (M2)
+- **Date:** 2026-07-12
+- **Status:** Accepted
+- **Context:** M2 will expose the first real endpoints (authentication). Authentication
+  answers *who the user is*; it does not answer *how the application is protected*.
+  Opening that door before the platform is hardened would mean auth endpoints exist
+  without the protections around them.
+- **Decision:** Insert milestone **M1.5 — Security Foundation** between M1 and M2.
+  Scope is platform hardening only — **no business logic, no authentication
+  endpoints**: security response headers (HSTS, X-Content-Type-Options, frame
+  protection, Referrer-Policy, a baseline CSP for the API), HTTPS redirection policy,
+  a config-driven **CORS** allowlist, **rate limiting** (ASP.NET Core rate limiter),
+  request body **size limits**, file-upload size / **MIME allowlist** (limits only —
+  storage is ADR-0012), **JWT bearer configuration** bound from config (validation
+  parameters only — *no* login or token issuance), a **secret-management strategy**
+  (env vars now per §8; external manager deferred to the cloud decision, §11),
+  **password-policy configuration** (values only), **security event logging**, and
+  basic **API abuse protection**. Delivered with tests and obeying the M1 envelope +
+  correlation contract (ADR-0008).
+- **Alternatives considered:** Go straight to M2 (rejected: auth endpoints would ship
+  before platform protections); fold hardening into M2 (rejected: mixes concerns and
+  bloats the authentication milestone).
+- **Consequences:** M2 is built on an already-hardened platform. Some values are
+  placeholders pending the open cloud / secret-manager decision (§11). No business
+  scope is introduced. **M2 (Authentication) additionally requires an approved
+  Authentication Design Review before any code** — design first, implementation second.
+
 ## ADR-0009 — Adopt milestone naming (M0–M9) for delivery
 - **Date:** 2026-07-12
 - **Status:** Accepted
