@@ -7,41 +7,31 @@
 
 ## Active task
 
-**M1.5 — Security Foundation (+ File Storage Abstraction)** — ✅ **COMPLETE, awaiting review.**
-(ADR-0010, ADR-0012. Prior: M0 Bootstrap ✅, M1 API Foundation ✅ / ADR-0008.)
+**M2 — Authentication Foundation** — 🚧 **IN PROGRESS.**
+(Design approved: `docs/design/M2_AUTHENTICATION_DESIGN_REVIEW.md`; decisions in **ADR-0013**.
+Prior: M0 ✅, M1 API Foundation ✅ / ADR-0008, M1.5 Security Foundation ✅ / ADR-0010.)
 
 ### Goal
-Harden the platform *before* authentication (M2) exposes endpoints, so every future
-endpoint is born behind the protections. Platform hardening only — **no business
-logic, no auth endpoints, no token issuance, no document uploads.**
+The clean authentication **core** for the Identity context: self-managed identity
+(ASP.NET Core Identity) issuing our **own JWTs**, on the M1 envelope + M1.5 hardening.
 
-### What was delivered
-- **Security headers** on every response (nosniff, frame-DENY, referrer, CSP; `Server`
-  suppressed; CSP relaxed only for Swagger in Dev).
-- **HTTPS/HSTS** (config-gated, outside Development) + forwarded-headers for proxies.
-- **CORS** config-driven allowlist (empty = none); correlation headers exposed.
-- **Rate limiting** (per-IP fixed window + reserved `sensitive` policy) → **429 envelope**
-  + security-event log.
-- **Request body limit** (Kestrel, 10 MB) and **file upload** size/MIME/extension
-  allowlists via `FileUploadValidator`.
-- **JWT config** bound + **fail-fast** validated (no issuance yet); **password policy**
-  values; **security event logging** on 401/403/429.
-- **`IFileStorageService`** (Application) + **local-disk** implementation (Infrastructure)
-  behind the abstraction (ADR-0012).
-- All responses still obey the M1 envelope + correlation contract (ADR-0008).
+### In scope
+- `ApplicationUser` (lean) + roles (the 9 of §13) + Identity EF stores + migration.
+- Registration, login → JWT access + rotating refresh (response body).
+- Refresh rotation + reuse detection + revocation; **multi-device** sessions;
+  logout / logout-all.
+- Policy-based RBAC (+ permission-catalogue seam); account lifecycle states + admin
+  transitions; lockout (5/15 min, reset-on-success, audit every attempt).
+- Password change; **password-reset behind an abstraction** (no email delivery yet).
+- `ITokenSigner` abstraction (HS256 now, RS256/JWKS later); claims incl. `permissionsVersion`.
+- Audit events; tests (unit + integration + architecture).
 
-### Definition of Done check
-- [x] Platform hardening in place; no business logic / endpoints / token issuance.
-- [x] No new third-party deps (built-in rate limiting/CORS; one first-party options helper).
-- [x] Tests pass — **68 total** (53 unit, 9 integration, 6 architecture).
-- [x] Manual smoke: headers present, no `Server` banner, enveloped 429, Swagger loads.
-- [x] Decisions/contracts recorded (ADR-0010/0012; Technical Bible §7.1, §8).
+### Explicitly OUT of scope (later milestones — must plug in, not complicate)
+- **SMS OTP**, **email verification**, **document / KYC verification** (Notifications / M6).
+- Business modules, payments.
 
 ### Status
-**AWAITING CO-FOUNDER REVIEW.** On approval, next is **M2 — Authentication** — which is
-**gated on an approved Authentication Design Review before any code** (05_NEXT_TASKS.md
-T-013): identity model, token lifecycle, refresh rotation, role/permission strategy,
-account states, password reset, email/OTP, sessions, audit events, future external IdPs.
+Building. Contract: every endpoint uses the M1 envelope (ADR-0008) and M1.5 hardening.
 
 ---
 

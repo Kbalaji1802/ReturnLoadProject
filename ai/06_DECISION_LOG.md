@@ -23,6 +23,48 @@
 
 ---
 
+## ADR-0013 — Authentication foundation (M2): self-managed identity + own JWTs
+- **Date:** 2026-07-12
+- **Status:** Accepted
+- **Context:** M2 needs authentication before any business feature. The approach was the
+  last open item in `03_TECHNICAL_BIBLE.md` §11. Design reviewed in full at
+  `docs/design/M2_AUTHENTICATION_DESIGN_REVIEW.md` and approved by the co-founder with the
+  decisions below. Clients are the Flutter mobile app and the Angular admin SPA.
+- **Decision:**
+  1. **Framework:** **ASP.NET Core Identity** for the user store + credential primitives
+     (hashing, lockout, security stamps, token providers), backed by EF Core — but the API
+     **issues its own JWTs** (no Identity cookies/UI). Self-managed, not a managed IdP.
+     `User` stays lean (auth only); Driver/Shipper/staff are separate profiles keyed by
+     `UserId`.
+  2. **Refresh-token transport:** **response body** (uniform across Flutter secure storage
+     and the Angular SPA; keeps the API stateless).
+  3. **Password hasher:** **PBKDF2** (Identity default). **Argon2id is a future migration
+     option** behind `IPasswordHasher<T>` if requirements change.
+  4. **Token signing:** **HS256 for MVP → RS256 + JWKS for production.** The signer is
+     **abstracted behind an interface** (`ITokenSigner`) so switching algorithms needs no
+     business-logic change; support multiple keys via `kid` for zero-downtime rotation.
+  5. **Lifetimes & lockout:** access **15 min**, refresh **7 days** (a "Remember Me"
+     extension is a future option). Lockout: **5 failed attempts → 15-min lock**; the
+     failure count **resets on successful login**; **every failed attempt is audited**;
+     IP/device rate limiting reuses the M1.5 `sensitive` policy.
+  6. **Sessions:** **multi-device** (Option A) — independent rotating refresh-token
+     families per device; logout revokes one, logout-all revokes all + bumps the security
+     stamp / `permissionsVersion`.
+  7. **Token claims:** `sub`, `userId`, `role`(s), `permissionsVersion`, `tenantId`
+     (reserved), `deviceId` (optional), `jti`, `iat`, `exp`. **`permissionsVersion`**
+     lets a role/permission change invalidate outstanding access tokens by version
+     comparison — no token-format redesign.
+- **Alternatives considered:** fully custom identity (rejected: re-implements crypto);
+  managed IdP such as Auth0 (rejected for MVP: cost, external dependency, India
+  data-residency questions — revisit for enterprise SSO); HttpOnly-cookie refresh
+  (rejected: complicates the mobile client; response-body is uniform).
+- **Consequences:** Resolves §11 "auth approach". RBAC uses the 9 roles (§13) via
+  **policy-based** authorization with a permission-catalogue seam for future fine-grained
+  permissions. **M2 scope explicitly excludes SMS OTP, email verification, and document
+  verification** — these plug into this foundation in later milestones (Notifications,
+  M6 Trust & Safety) rather than complicating the core now. Authentication (this ADR) is
+  kept separate from **trust verification / transactability** (M6) per the design review §11.
+
 ## ADR-0012 — File storage abstraction, interfaces-first
 - **Date:** 2026-07-12
 - **Status:** Accepted

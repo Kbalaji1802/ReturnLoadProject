@@ -1,6 +1,11 @@
 # M2 — Authentication Foundation: Design Review
 
-> **Status:** DRAFT — awaiting co-founder approval. **No code is written until this is approved.**
+> **Status:** ✅ **APPROVED** (2026-07-12) — recorded as **ADR-0013**. Implementation underway.
+> Approved choices: ASP.NET Core Identity + own JWTs · response-body refresh · PBKDF2
+> (Argon2id future) · HS256→RS256/JWKS behind `ITokenSigner` · 15 min / 7 day · 5-attempt /
+> 15-min lockout (reset on success, audit every attempt) · multi-device sessions · claims
+> incl. `permissionsVersion`. **Excluded from M2:** SMS OTP, email verification, document
+> verification (later milestones).
 > **Milestone:** M2 (bounded context: **Identity**). Builds on M1 (API contract, ADR-0008)
 > and M1.5 (Security Foundation, ADR-0010). **Region:** India / Tamil Nadu (ADR-0004).
 >
