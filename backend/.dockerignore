@@ -1,0 +1,12 @@
+# Keep the Docker build context small and reproducible.
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/*.user
+**/TestResults/
+tests/
+Dockerfile
+.dockerignore
+.editorconfig
+**/appsettings.*.local.json

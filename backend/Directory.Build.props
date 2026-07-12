@@ -1,0 +1,27 @@
+<Project>
+
+  <!--
+    Solution-wide build settings. Centralised here so every project shares one
+    language/quality baseline (01_PROJECT_RULES.md §2: "One language style per
+    stack"). Individual .csproj files should NOT redefine these.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- Fail loudly: compiler + analyzer + NuGet-audit warnings are errors, so
+         nothing sloppy or vulnerable reaches main (01_PROJECT_RULES.md §1, §2, §5).
+         Code-style (IDE####) rules are enforced by the editor and `dotnet format`
+         via .editorconfig rather than failing the build. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+
+    <!-- Deterministic, reproducible builds. -->
+    <Deterministic>true</Deterministic>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

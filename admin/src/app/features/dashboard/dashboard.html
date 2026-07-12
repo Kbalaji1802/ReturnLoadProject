@@ -1,0 +1,48 @@
+<section class="dashboard">
+  <header class="dashboard__header">
+    <h1>Operations dashboard</h1>
+    <p>Foundation shell — {{ metricsTracked() }} metrics wired to live data in a later task (T-050).</p>
+  </header>
+
+  <div class="dashboard__kpis">
+    @for (kpi of kpis(); track kpi.label) {
+      <mat-card class="kpi" appearance="outlined">
+        <mat-card-content>
+          <div class="kpi__value">{{ kpi.value }}</div>
+          <div class="kpi__label">{{ kpi.label }}</div>
+        </mat-card-content>
+      </mat-card>
+    }
+  </div>
+
+  <mat-card class="dashboard__health" appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Backend API</mat-card-title>
+      <mat-card-subtitle>Verify connectivity to the ReturnLoad API</mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      @if (loading()) {
+        <mat-progress-bar mode="indeterminate" />
+      }
+      @if (health(); as status) {
+        <p class="status status--ok">
+          <mat-icon>check_circle</mat-icon>
+          <span>{{ status.status }} — {{ status.service }}</span>
+        </p>
+      }
+      @if (error(); as message) {
+        <p class="status status--error">
+          <mat-icon>error</mat-icon>
+          <span>{{ message }}</span>
+        </p>
+      }
+    </mat-card-content>
+
+    <mat-card-actions>
+      <button mat-flat-button color="primary" (click)="checkApiHealth()">
+        Check API health
+      </button>
+    </mat-card-actions>
+  </mat-card>
+</section>

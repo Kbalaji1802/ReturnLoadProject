@@ -1,0 +1,30 @@
+.layout {
+  height: 100vh;
+}
+
+.layout__sidenav {
+  width: 240px;
+}
+
+.layout__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.layout__toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.layout__content {
+  padding: 1.5rem;
+}
+
+.layout__link--active {
+  font-weight: 600;
+}

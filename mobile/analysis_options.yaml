@@ -1,0 +1,9 @@
+# Static analysis for the ReturnLoad mobile app. The Flutter lint set keeps one
+# consistent style across the codebase (01_PROJECT_RULES.md §2).
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    prefer_const_constructors: true
+    prefer_final_locals: true
+    always_declare_return_types: true

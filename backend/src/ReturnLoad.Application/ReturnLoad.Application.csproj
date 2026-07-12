@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Common build settings come from ..\..\Directory.Build.props -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\ReturnLoad.Domain\ReturnLoad.Domain.csproj" />
+    <ProjectReference Include="..\ReturnLoad.Shared\ReturnLoad.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Object-mapping (AutoMapper) is intentionally NOT referenced yet. The free
+      AutoMapper line carries an unpatched high-severity DoS advisory
+      (CVE-2026-32933) and the patched releases (>= 15.1.1) are commercially
+      licensed. With zero mappings in the foundation, a mapper is introduced when
+      the first real mapping is needed — see 06_DECISION_LOG.md ADR-0007.
+    -->
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.*" />
+  </ItemGroup>
+
+</Project>

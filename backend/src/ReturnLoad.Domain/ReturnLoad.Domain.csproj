@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Common build settings come from ..\..\Directory.Build.props.
+    The Domain is the innermost Clean Architecture layer: it depends on NOTHING.
+  -->
+
+</Project>

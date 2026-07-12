@@ -1,0 +1,39 @@
+# Normalize line endings across Windows / macOS / Linux.
+# Text files are stored as LF in the repo; Git converts on checkout per platform.
+* text=auto eol=lf
+
+# Explicitly text (so diffs/merges behave) — source and config.
+*.cs        text
+*.csproj    text
+*.props     text
+*.targets   text
+*.ts        text
+*.js        text
+*.json      text
+*.html      text
+*.scss      text
+*.css       text
+*.dart      text
+*.yaml      text
+*.yml       text
+*.md        text
+*.txt       text
+*.sln       text eol=crlf
+
+# Scripts keep their required endings regardless of platform.
+*.sh        text eol=lf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# Binary — never touch line endings or attempt to diff.
+*.zip       binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.pdf       binary
+*.woff      binary
+*.woff2     binary
+*.ttf       binary

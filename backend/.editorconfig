@@ -1,0 +1,27 @@
+# EditorConfig for the ReturnLoad backend (.NET).
+# One style per stack, enforced by the formatter/analyzers (01_PROJECT_RULES.md §2).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.cs]
+indent_size = 4
+# Prefer file-scoped namespaces, var when apparent, expression bodies where they read well.
+csharp_style_namespace_declarations = file_scoped:warning
+dotnet_sort_system_directives_first = true
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+csharp_prefer_braces = true:warning
+# Flag unnecessary usings in the editor / `dotnet format` (not enforced at build).
+dotnet_diagnostic.IDE0005.severity = suggestion
+
+[*.{csproj,props,targets}]
+indent_size = 2
+
+[*.{json,yml,yaml}]
+indent_size = 2

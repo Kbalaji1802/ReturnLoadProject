@@ -1,0 +1,43 @@
+# ── Secrets & environment ────────────────────────────────────────────────
+# Real environment files must NEVER be committed. Only .env.example is tracked.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+credentials.json
+
+# ── OS / editor cruft ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
+
+# ── Logs & temp ──────────────────────────────────────────────────────────
+*.log
+logs/
+tmp/
+temp/
+
+# ── Dependencies & build output (per-stack, filled in as we add code) ─────
+node_modules/
+dist/
+build/
+coverage/
+.gradle/
+.dart_tool/
+.pub-cache/
+.angular/
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# ── Docker / local data volumes ──────────────────────────────────────────
+docker/**/data/
+*.local
