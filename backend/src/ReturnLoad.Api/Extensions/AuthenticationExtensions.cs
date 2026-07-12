@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using ReturnLoad.Api.Configuration;
+using ReturnLoad.Application.Identity;
+using ReturnLoad.Shared.Configuration;
 
 namespace ReturnLoad.Api.Extensions;
 
@@ -29,6 +31,8 @@ public static class AuthenticationExtensions
             .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
+                // Keep our claim names as issued ("sub", "role") rather than remapping.
+                options.MapInboundClaims = false;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
@@ -41,10 +45,21 @@ public static class AuthenticationExtensions
                         ? null
                         : new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
                     ClockSkew = TimeSpan.FromSeconds(30),
+                    NameClaimType = "sub",
+                    RoleClaimType = "role",
                 };
             });
 
-        services.AddAuthorization();
+        // Policy-based RBAC (ADR-0013): endpoints reference a policy name; the role
+        // mapping lives in one place (AuthorizationPolicies.RoleMap). Endpoints are public
+        // unless they opt in via [Authorize] or a policy.
+        services.AddAuthorization(options =>
+        {
+            foreach ((string policy, string[] roles) in AuthorizationPolicies.RoleMap)
+            {
+                options.AddPolicy(policy, builder => builder.RequireRole(roles));
+            }
+        });
 
         return services;
     }

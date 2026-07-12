@@ -1,9 +1,14 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using ReturnLoad.Application.Abstractions.Identity;
 using ReturnLoad.Application.Abstractions.Storage;
+using ReturnLoad.Infrastructure.Identity;
+using ReturnLoad.Infrastructure.Identity.Tokens;
 using ReturnLoad.Infrastructure.Persistence;
 using ReturnLoad.Infrastructure.Storage;
+using ReturnLoad.Shared.Configuration;
 using ReturnLoad.Shared.Diagnostics;
 
 namespace ReturnLoad.Infrastructure;
@@ -47,6 +52,41 @@ public static class DependencyInjection
         services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));
         services.AddSingleton<IFileStorageService, LocalDiskFileStorageService>();
 
+        AddIdentity(services, configuration);
+
         return services;
+    }
+
+    private static void AddIdentity(IServiceCollection services, IConfiguration configuration)
+    {
+        PasswordPolicyOptions password =
+            configuration.GetSection(PasswordPolicyOptions.SectionName).Get<PasswordPolicyOptions>() ?? new PasswordPolicyOptions();
+
+        services
+            .AddIdentityCore<ApplicationUser>(options =>
+            {
+                options.User.RequireUniqueEmail = true;
+
+                options.Password.RequiredLength = password.MinLength;
+                options.Password.RequireUppercase = password.RequireUppercase;
+                options.Password.RequireLowercase = password.RequireLowercase;
+                options.Password.RequireDigit = password.RequireDigit;
+                options.Password.RequireNonAlphanumeric = password.RequireNonAlphanumeric;
+
+                // Lockout: 5 failed attempts → 15-minute lock (ADR-0013).
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+                options.Lockout.AllowedForNewUsers = true;
+            })
+            .AddRoles<ApplicationRole>()
+            .AddEntityFrameworkStores<ApplicationDbContext>();
+        // Default token providers (email-confirmation / password-reset tokens) are added
+        // when those flows ship — they are deliberately out of the M2 core (ADR-0013).
+
+        // Token signing is abstracted so HS256 → RS256/JWKS is an implementation swap (ADR-0013).
+        services.AddSingleton<ITokenSigner, HmacTokenSigner>();
+        services.AddScoped<ITokenService, JwtTokenService>();
+        services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+        services.AddScoped<IAuthService, AuthService>();
     }
 }

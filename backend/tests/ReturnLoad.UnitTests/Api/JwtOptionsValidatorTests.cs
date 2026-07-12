@@ -1,6 +1,7 @@
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using ReturnLoad.Api.Configuration;
+using ReturnLoad.Shared.Configuration;
 
 namespace ReturnLoad.UnitTests.Api;
 

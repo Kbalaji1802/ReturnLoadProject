@@ -7,7 +7,7 @@
 
 ## Active task
 
-**M2 — Authentication Foundation** — 🚧 **IN PROGRESS.**
+**M2 — Authentication Foundation** — ✅ **CORE COMPLETE, awaiting review.**
 (Design approved: `docs/design/M2_AUTHENTICATION_DESIGN_REVIEW.md`; decisions in **ADR-0013**.
 Prior: M0 ✅, M1 API Foundation ✅ / ADR-0008, M1.5 Security Foundation ✅ / ADR-0010.)
 
@@ -30,8 +30,26 @@ The clean authentication **core** for the Identity context: self-managed identit
 - **SMS OTP**, **email verification**, **document / KYC verification** (Notifications / M6).
 - Business modules, payments.
 
+### Delivered
+- ASP.NET Core Identity (`ApplicationUser`, `ApplicationRole`) + our own JWTs; EF Identity
+  stores; **`M2_Identity` migration** (AspNet* tables incl. `AspNetUserLogins` external seam,
+  + `RefreshTokens`).
+- Endpoints (all enveloped, ADR-0008; `sensitive` rate-limit on the anonymous ones):
+  `POST /api/v1/auth/register|login|refresh` and `logout|logout-all` (authenticated).
+- Rotating, hashed, single-use refresh tokens with reuse detection + multi-device;
+  lockout (5/15 min, reset-on-success); `ITokenSigner` (HS256) abstraction; claims incl.
+  `permissionsVersion`; policy-based RBAC catalogue; audit as security-tagged logs.
+- Tests: **86 green** (60 unit, 18 integration on EF InMemory, 8 architecture).
+
+### Known follow-ups (not blockers for the core)
+- Live PostgreSQL smoke deferred to the local Docker env (T-010); persistent `AuditLog`
+  table lands with the domain model (T-002); role seeding at deploy time.
+- `permissionsVersion` is issued + bumped; per-request enforcement check is future work
+  (access tokens are short-lived, so logout-all relies on refresh revocation + TTL).
+
 ### Status
-Building. Contract: every endpoint uses the M1 envelope (ADR-0008) and M1.5 hardening.
+**AWAITING CO-FOUNDER REVIEW.** Excluded (by instruction): SMS OTP, email verification,
+document verification — later milestones.
 
 ---
 

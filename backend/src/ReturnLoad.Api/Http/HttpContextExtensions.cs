@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
+using ReturnLoad.Application.Identity;
 
 namespace ReturnLoad.Api.Http;
 
@@ -19,4 +21,17 @@ public static class HttpContextExtensions
         && value is string correlationId
             ? correlationId
             : context.TraceIdentifier;
+
+    /// <summary>
+    /// Extracts the authenticated user's id from the <c>userId</c> (or <c>sub</c>) claim.
+    /// Returns false when unauthenticated or the claim is missing/malformed.
+    /// </summary>
+    public static bool TryGetUserId(this HttpContext context, out Guid userId)
+    {
+        string? value = context.User.FindFirstValue(AppClaims.UserId)
+            ?? context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? context.User.FindFirstValue("sub");
+
+        return Guid.TryParse(value, out userId);
+    }
 }
