@@ -59,18 +59,18 @@ Coarse, communication-friendly milestones, each owned by one **bounded context**
       the CI pipeline** (lint + build + test + dependency/secret scan on every push).
 - [ ] **T-012 — Database migrations (v1).** Implement the T-002 model as versioned
       migrations + seed data.
-- [ ] **T-012.5 — Security Foundation (= milestone M1.5, next).** Platform hardening
-      per ADR-0010: security headers, HTTPS redirection, CORS allowlist, rate
-      limiting, request/upload/MIME limits, JWT config (validation only, no login),
-      secret strategy, password-policy config, security logging, abuse protection.
-      Plus `IFileStorageService` interfaces (ADR-0012). No business logic.
-- [ ] **T-013 — Identity & Access (= milestone M2).** Identity, JWT, refresh tokens,
+- [x] ~~**T-012.5 — Security Foundation (= milestone M1.5).**~~ ✅ **Done** (ADR-0010,
+      ADR-0012): security headers, HTTPS/HSTS, CORS allowlist, rate limiting,
+      request/upload/MIME limits, JWT config + fail-fast, secret strategy, password-policy
+      config, security logging, `IFileStorageService`. 68 tests green.
+- [ ] **T-013 — Identity & Access (= milestone M2, next).** Identity, JWT, refresh tokens,
       roles, permissions, authorization policies (`03_TECHNICAL_BIBLE.md` §13). **No
       document uploads.** Every endpoint uses the M1 contract (ADR-0008) on the M1.5-
       hardened platform. **Gate:** an approved *Authentication Design Review* precedes
-      any code (identity model, token lifecycle, refresh rotation, role/permission
-      strategy, account states, password reset, email/OTP, sessions, audit events,
-      future external IdPs).
+      any code — see
+      [`docs/design/M2_AUTHENTICATION_DESIGN_REVIEW.md`](../docs/design/M2_AUTHENTICATION_DESIGN_REVIEW.md)
+      (identity model, token lifecycle, refresh rotation, role/permission strategy,
+      account states, password reset, email/OTP, sessions, audit events, external IdPs).
 - [ ] **T-014 — Trust & Safety (verification).** Implement the pre-trip gate from
       `08_TRUST_AND_SAFETY.md`: Document entity, driver KYC, RC / insurance /
       licence / permit verification states, expiry reminders, fraud reports,
