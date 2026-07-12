@@ -23,6 +23,47 @@
 
 ---
 
+## ADR-0014 — Core domain model (M3): DDD tactical patterns, guard-clause invariants
+- **Date:** 2026-07-12
+- **Status:** Accepted
+- **Context:** M3 builds the business domain model (the work `03_TECHNICAL_BIBLE.md` §12
+  reserved as T-002) across all bounded contexts, in the Domain layer only — no APIs,
+  services, EF configs, migrations, or business logic beyond the model itself.
+- **Decision:**
+  1. **Tactical DDD patterns** in `ReturnLoad.Domain`: `AggregateRoot<TId>` (records
+     `IDomainEvent`s), `ValueObject` (value equality), `BaseEntity<TId>`. Aggregates are
+     `sealed`, constructed via static factories, and mutated only through intention-named
+     methods that keep invariants true.
+  2. **Invariants enforced by guard clauses that throw `DomainException`** (with a stable
+     `Code`), *not* the `Result` pattern. Rationale: the Domain depends on **nothing**
+     (ADR-0006) so it cannot use `Shared.Result`; an invalid entity must be
+     unconstructable, and throwing keeps constructors/factories terse and rules testable.
+     The application layer maps `DomainException.Code` to the API envelope (ADR-0008).
+  3. **Bounded contexts as namespaces/folders** in one Domain project (modular monolith,
+     ADR-0002, ADR-0011): Identity, Fleet, Documents, Loads, Trips, Tracking, Reviews,
+     Administration. Cross-context references use ids (Guid), not navigation, to keep
+     aggregates independent.
+  4. **India-localised value objects** (ADR-0004): `MobileNumber`, `Money` (INR),
+     `Distance` (km), `AadhaarNumber` (masked, PII-sensitive), `DrivingLicenceNumber`,
+     `VehicleRegistrationNumber`, `GstNumber`, plus `EmailAddress`, `Weight`,
+     `GeoCoordinate`, `Location`, `TimeWindow`.
+  5. **Cross-aggregate rules stay at the edge:** e.g. `Vehicle.Activate(bool
+     mandatoryDocumentsValid)` and `DriverProfile.MarkVerified()` express the rule but the
+     document-validity check is supplied by the application layer (matching filters 7–8,
+     Trust & Safety). Verification is modelled as a **state with expiry** on `Document`
+     ("fail closed"). `AuditLog` and `TrackingEvent` are append-only; TrackingEvent keeps
+     the device's truthful captured-at time (OFFLINE_STRATEGY §7).
+- **Alternatives considered:** `Result`-returning factories (rejected: Domain can't
+  reference Shared and exceptions model "impossible state" better); anemic
+  entities + separate services (rejected: violates encapsulation — invariants would leak);
+  a project-per-context split (rejected now: premature; namespaces suffice for a modular
+  monolith and a split can follow context lines later).
+- **Consequences:** The whole domain vocabulary exists and is unit-tested (invariants,
+  value objects, events). **Milestone reshape:** M3 = *Core Domain Model* (all contexts),
+  superseding the earlier "M3 = User" line in ADR-0009; subsequent milestones add the
+  application/API/persistence layers **per context** on top of this model. No persistence
+  yet — EF configurations + migrations for these entities are the next milestone.
+
 ## ADR-0013 — Authentication foundation (M2): self-managed identity + own JWTs
 - **Date:** 2026-07-12
 - **Status:** Accepted

@@ -2,13 +2,10 @@ namespace ReturnLoad.Domain.Common;
 
 /// <summary>
 /// Base class for domain entities, providing a strongly-typed identity and
-/// value-based equality on that identity.
-/// <para>
-/// Concrete business entities (Load, Trip, Carrier, Vehicle, …) are intentionally
-/// NOT defined here yet — they are introduced by the domain-model task T-002
-/// (see 03_TECHNICAL_BIBLE.md §12). This type only establishes the shared shape
-/// they will inherit.
-/// </para>
+/// value-based equality on that identity. Aggregate roots extend
+/// <see cref="AggregateRoot{TId}"/> (which adds domain events); the business entities
+/// (Carrier, DriverProfile, Vehicle, Load, Trip, …) live in their bounded-context
+/// namespaces under <c>ReturnLoad.Domain</c> (see 03_TECHNICAL_BIBLE.md §12).
 /// </summary>
 /// <typeparam name="TId">The type of the entity's identifier.</typeparam>
 public abstract class BaseEntity<TId>

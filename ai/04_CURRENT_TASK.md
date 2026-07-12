@@ -7,49 +7,37 @@
 
 ## Active task
 
-**M2 — Authentication Foundation** — ✅ **CORE COMPLETE, awaiting review.**
-(Design approved: `docs/design/M2_AUTHENTICATION_DESIGN_REVIEW.md`; decisions in **ADR-0013**.
-Prior: M0 ✅, M1 API Foundation ✅ / ADR-0008, M1.5 Security Foundation ✅ / ADR-0010.)
+**M3 — Core Domain Model** — ✅ **COMPLETE, awaiting review.**
+(Decisions in **ADR-0014**. Prior: M0 ✅, M1 ✅/ADR-0008, M1.5 ✅/ADR-0010, M2 ✅/ADR-0013.)
 
 ### Goal
-The clean authentication **core** for the Identity context: self-managed identity
-(ASP.NET Core Identity) issuing our **own JWTs**, on the M1 envelope + M1.5 hardening.
+Build the business domain model (§12 / T-002) across all bounded contexts, in the
+**Domain layer only** — no APIs, controllers, services, EF configs, migrations, matching,
+GPS, payments, or notifications delivery.
 
-### In scope
-- `ApplicationUser` (lean) + roles (the 9 of §13) + Identity EF stores + migration.
-- Registration, login → JWT access + rotating refresh (response body).
-- Refresh rotation + reuse detection + revocation; **multi-device** sessions;
-  logout / logout-all.
-- Policy-based RBAC (+ permission-catalogue seam); account lifecycle states + admin
-  transitions; lockout (5/15 min, reset-on-success, audit every attempt).
-- Password change; **password-reset behind an abstraction** (no email delivery yet).
-- `ITokenSigner` abstraction (HS256 now, RS256/JWKS later); claims incl. `permissionsVersion`.
-- Audit events; tests (unit + integration + architecture).
+### Delivered (`backend/src/ReturnLoad.Domain`)
+- **Building blocks:** `AggregateRoot<TId>` (+ domain events), `ValueObject`,
+  `DomainException`, `Guard`, `IDomainEvent`.
+- **Value objects:** MobileNumber, EmailAddress, Money (INR), Weight, Distance,
+  GeoCoordinate, Location, TimeWindow, DrivingLicenceNumber, AadhaarNumber (masked),
+  GstNumber, VehicleRegistrationNumber, VehicleCapacity, LoadRequirement, ReturnLeg,
+  LocationPoint, Rating.
+- **Aggregates by context:** Identity (UserProfile, Carrier, DriverProfile, Dispatcher,
+  Association) · Fleet (Vehicle) · Documents (Document) · Loads (Load) · Trips (Trip) ·
+  Tracking (TrackingEvent) · Reviews (Review) · Administration (AuditLog, Notification).
+- **Enums** for every business state; **domain events** (DriverRegistered/Verified,
+  VehicleRegistered, DocumentUploaded/Verified, LoadCreated/Posted, TripCreated/Started/
+  Completed, CarrierRegistered).
+- **Tests:** 138 green total (**110 unit** incl. new domain invariants/VO/rule tests, 18
+  integration, 10 architecture — new: value objects sealed + in Domain; events in Domain).
 
-### Explicitly OUT of scope (later milestones — must plug in, not complicate)
-- **SMS OTP**, **email verification**, **document / KYC verification** (Notifications / M6).
-- Business modules, payments.
-
-### Delivered
-- ASP.NET Core Identity (`ApplicationUser`, `ApplicationRole`) + our own JWTs; EF Identity
-  stores; **`M2_Identity` migration** (AspNet* tables incl. `AspNetUserLogins` external seam,
-  + `RefreshTokens`).
-- Endpoints (all enveloped, ADR-0008; `sensitive` rate-limit on the anonymous ones):
-  `POST /api/v1/auth/register|login|refresh` and `logout|logout-all` (authenticated).
-- Rotating, hashed, single-use refresh tokens with reuse detection + multi-device;
-  lockout (5/15 min, reset-on-success); `ITokenSigner` (HS256) abstraction; claims incl.
-  `permissionsVersion`; policy-based RBAC catalogue; audit as security-tagged logs.
-- Tests: **86 green** (60 unit, 18 integration on EF InMemory, 8 architecture).
-
-### Known follow-ups (not blockers for the core)
-- Live PostgreSQL smoke deferred to the local Docker env (T-010); persistent `AuditLog`
-  table lands with the domain model (T-002); role seeding at deploy time.
-- `permissionsVersion` is issued + bumped; per-request enforcement check is future work
-  (access tokens are short-lived, so logout-all relies on refresh revocation + TTL).
+### Explicitly NOT built (by instruction)
+Controllers/APIs/services/UI, EF configurations, migrations, repositories, matching, GPS,
+payments, notification delivery.
 
 ### Status
-**AWAITING CO-FOUNDER REVIEW.** Excluded (by instruction): SMS OTP, email verification,
-document verification — later milestones.
+**AWAITING CO-FOUNDER REVIEW.** Recommended next: **persist the domain** — EF Core
+configurations + migration for these entities (see `05_NEXT_TASKS.md`).
 
 ---
 

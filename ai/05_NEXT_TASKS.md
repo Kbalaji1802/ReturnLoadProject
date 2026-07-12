@@ -15,14 +15,19 @@ Coarse, communication-friendly milestones, each owned by one **bounded context**
 | **M0** | Bootstrap — stack locked, three scaffolds, tests/CI harness | Platform | ✅ Done (ADR-0006) |
 | **M1** | **API Foundation** — response envelope, error/validation contract, correlation ids, versioning, pagination | Platform | ✅ Done (ADR-0008) |
 | **M1.5** | **Security Foundation** — headers, HTTPS, CORS, rate limiting, size/upload/MIME limits, JWT config (no login), secret strategy, password policy, security logging, abuse protection | Platform | ⏭️ **Next** (ADR-0010) |
-| **M2** | **Authentication** — identity, JWT, refresh tokens, roles, permissions, authorization policies. **No document uploads.** Requires an approved Authentication Design Review first. | Identity | ⬜ (ADR-0010) |
-| **M3** | User | Identity | ⬜ |
-| **M4** | Driver | Fleet | ⬜ |
+| **M2** | **Authentication** — identity, JWT, refresh tokens, roles, permissions, authorization policies | Identity | ✅ Done (ADR-0013) |
+| **M3** | **Core Domain Model** — all business aggregates, value objects, enums, domain events (Domain layer only) | All | ✅ Done (ADR-0014) |
+| **M3.5** | **Persistence** — EF Core configurations + migration for the M3 model; repositories | All | ⏭️ **Next (recommended)** |
+| **M4** | Driver (application/API on the domain) | Fleet/Identity | ⬜ |
 | **M5** | Vehicle | Fleet | ⬜ |
 | **M6** | Documents (KYC / RC / insurance / licence / permit) — uses `IFileStorageService` (ADR-0012) | Documents | ⬜ |
 | **M7** | GPS / location | Tracking | ⬜ |
 | **M8** | Loads | Loads | ⬜ |
 | **M9** | Matching | Matching / Trips | ⬜ |
+
+> **Reshape (ADR-0014):** M3 became the *Core Domain Model* for **all** contexts (not just
+> User). Feature milestones M4+ now add the **application/API/persistence** layers on top of
+> that shared model, per context.
 
 > **Sequencing rationale:** hardening (M1.5) before authentication (M2) means every
 > auth endpoint is born behind the platform's protections. `IFileStorageService`
@@ -41,9 +46,9 @@ Coarse, communication-friendly milestones, each owned by one **bounded context**
       `04_CURRENT_TASK.md`). **Still open** in `03_TECHNICAL_BIBLE.md` §11: cloud,
       cache, notifications, maps, auth provider — decide each as its module needs it.
       _Resolved already: target market (ADR-0004), MVP payments (ADR-0005)._
-- [ ] **T-002 — Define the domain model (v1).** Entities and relationships for
-      Carrier, Driver, Shipper, Load, Trip, Return Leg, Match, Booking, Bid,
-      Settlement, Rating. ERD in `/database` + `/docs`.
+- [x] ~~**T-002 — Define the domain model (v1).**~~ ✅ **Done by M3** (ADR-0014):
+      aggregates + value objects + enums + domain events across all bounded contexts
+      (Domain layer). Match/Booking/Settlement remain future aggregates.
 - [~] **T-003 — API contract (v1).** ✅ **Foundation delivered by M1** (ADR-0008):
       response envelope, error/validation contract, correlation ids, pagination,
       versioning — the shape every endpoint inherits. **Remaining:** the per-module
