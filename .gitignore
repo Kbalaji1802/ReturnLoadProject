@@ -41,3 +41,9 @@ venv/
 # ── Docker / local data volumes ──────────────────────────────────────────
 docker/**/data/
 *.local
+
+# ── Backup archives ──────────────────────────────────────────────────────
+# Zipped snapshots of the source are redundant with the tracked files.
+*.zip
+*.7z
+*.rar
