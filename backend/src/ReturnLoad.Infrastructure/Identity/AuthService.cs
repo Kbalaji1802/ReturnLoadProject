@@ -54,7 +54,20 @@ internal sealed class AuthService : IAuthService
             return MapIdentityFailure(result);
         }
 
-        LogSecurity("AccountRegistered", "Account registered for {Email}", email);
+        // Grant the marketplace-side role chosen at sign-up (M4.2, ADR-0017). The role store is
+        // seeded at startup, so this succeeds in practice; if it ever fails we roll the account
+        // back rather than leave a role-less account that cannot use the app (fail loudly).
+        string role = request.AccountType.ToRole();
+        IdentityResult roleResult = await _users.AddToRoleAsync(user, role);
+        if (!roleResult.Succeeded)
+        {
+            await _users.DeleteAsync(user);
+            _logger.LogError("Role assignment failed for {Email}: {Errors}", email,
+                string.Join("; ", roleResult.Errors.Select(e => e.Description)));
+            return Error.Validation("Could not complete registration. Please try again.");
+        }
+
+        LogSecurity("AccountRegistered", "Account registered for {Email} as {Role}", email, role);
         return await IssueTokensAsync(user, request.DeviceId, cancellationToken);
     }
 

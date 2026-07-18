@@ -51,6 +51,34 @@ public sealed class AuthEndpointsTests : IClassFixture<AuthApiFactory>
     }
 
     [Fact]
+    public async Task Register_defaults_to_the_driver_role()
+    {
+        HttpClient client = _factory.CreateClient();
+        ApiResponse<JsonElement> body = await ReadEnvelope(await Register(client, Unique("role-default"), StrongPassword));
+
+        JsonElement payload = DecodeJwtPayload(body.Data.GetProperty("accessToken").GetString()!);
+        Assert.Equal(Roles.Driver, payload.GetProperty("role").GetString());
+    }
+
+    [Fact]
+    public async Task Register_as_load_owner_grants_the_shipper_role()
+    {
+        HttpClient client = _factory.CreateClient();
+        HttpResponseMessage response = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            email = Unique("loadowner"),
+            password = StrongPassword,
+            phoneNumber = (string?)null,
+            deviceId = "test-device",
+            accountType = (int)AccountType.LoadOwner,
+        });
+
+        response.EnsureSuccessStatusCode();
+        JsonElement payload = DecodeJwtPayload((await ReadEnvelope(response)).Data.GetProperty("accessToken").GetString()!);
+        Assert.Equal(Roles.Shipper, payload.GetProperty("role").GetString());
+    }
+
+    [Fact]
     public async Task Register_with_a_weak_password_is_rejected_with_400()
     {
         HttpClient client = _factory.CreateClient();
