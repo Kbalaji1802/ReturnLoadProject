@@ -1,6 +1,10 @@
 using System.Reflection;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using ReturnLoad.Application.UseCases.Documents;
+using ReturnLoad.Application.UseCases.Loads;
+using ReturnLoad.Application.UseCases.Onboarding;
+using ReturnLoad.Application.UseCases.Trips;
 
 namespace ReturnLoad.Application;
 
@@ -21,6 +25,14 @@ public static class DependencyInjection
         Assembly applicationAssembly = typeof(IApplicationMarker).Assembly;
 
         services.AddValidatorsFromAssembly(applicationAssembly, includeInternalTypes: true);
+
+        // Use-case application services (M4 sprint). Implementations are internal to this layer.
+        services.AddScoped<ICarrierService, CarrierService>();
+        services.AddScoped<IDriverOnboardingService, DriverOnboardingService>();
+        services.AddScoped<IVehicleService, VehicleService>();
+        services.AddScoped<IDocumentService, DocumentService>();
+        services.AddScoped<ILoadService, LoadService>();
+        services.AddScoped<ITripService, TripService>();
 
         return services;
     }

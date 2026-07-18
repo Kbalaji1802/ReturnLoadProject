@@ -1,12 +1,15 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 using ReturnLoad.Api.Configuration;
 using ReturnLoad.Api.Extensions;
 using ReturnLoad.Api.Http;
 using ReturnLoad.Api.Hubs;
 using ReturnLoad.Api.Middleware;
+using Microsoft.Extensions.DependencyInjection;
 using ReturnLoad.Application;
 using ReturnLoad.Infrastructure;
+using ReturnLoad.Infrastructure.Persistence;
 using ReturnLoad.Shared.Diagnostics;
 using Serilog;
 
@@ -106,6 +109,24 @@ try
     app.UseCors(SecurityExtensions.CorsPolicyName);
     app.UseAuthentication();
     app.UseAuthorization();
+
+    // Development convenience: apply migrations and seed demo data so the platform is
+    // demoable end-to-end. Never runs outside Development. If the database is unavailable,
+    // log loudly and continue so the process can still start for inspection.
+    if (app.Environment.IsDevelopment())
+    {
+        try
+        {
+            using IServiceScope scope = app.Services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.MigrateAsync();
+            await DemoDataSeeder.SeedAsync(scope.ServiceProvider);
+            Log.Information("Development database migrated and demo data seeded.");
+        }
+        catch (Exception seedEx)
+        {
+            Log.Warning(seedEx, "Skipped dev migrate/seed — is PostgreSQL running? (docker compose up)");
+        }
+    }
 
     app.MapControllers();
     app.MapHub<NotificationsHub>("/hubs/notifications");

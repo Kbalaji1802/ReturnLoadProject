@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
 using ReturnLoad.Api.Http;
+using ReturnLoad.Domain.Common;
 using ReturnLoad.Shared.Api;
 
 namespace ReturnLoad.Api.Middleware;
@@ -35,6 +36,9 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
             ValidationException validation => (
                 StatusCodes.Status400BadRequest,
                 BuildValidationResponse(validation, httpContext)),
+            DomainException domain => (
+                StatusCodes.Status400BadRequest,
+                BuildDomainResponse(domain, httpContext)),
             _ => (
                 StatusCodes.Status500InternalServerError,
                 BuildUnexpectedResponse(exception, httpContext)),
@@ -62,6 +66,21 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
             .ToArray();
 
         return ApiResponse<object>.Fail(errors, "Validation failed.");
+    }
+
+    private ApiResponse<object> BuildDomainResponse(DomainException exception, HttpContext httpContext)
+    {
+        // A broken domain invariant that slipped past validation — client-caused, log at Warning.
+        _logger.LogWarning(
+            exception,
+            "Domain rule '{Code}' violated while processing {Method} {Path}",
+            exception.Code,
+            httpContext.Request.Method,
+            httpContext.Request.Path);
+
+        return ApiResponse<object>.Fail(
+            ApiError.General(exception.Code.ToUpperInvariant(), exception.Message),
+            exception.Message);
     }
 
     private ApiResponse<object> BuildUnexpectedResponse(Exception exception, HttpContext httpContext)

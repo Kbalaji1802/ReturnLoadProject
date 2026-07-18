@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using ReturnLoad.Domain.Common;
 
 namespace ReturnLoad.Application.Abstractions.Persistence;
@@ -14,6 +15,14 @@ public interface IRepository<TAggregate>
 {
     /// <summary>Loads an aggregate by id, or <see langword="null"/> if absent (soft-deleted rows are excluded).</summary>
     Task<TAggregate?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>Lists aggregates matching a predicate (read-only; soft-deleted rows excluded).</summary>
+    Task<IReadOnlyList<TAggregate>> ListAsync(
+        Expression<Func<TAggregate, bool>> predicate,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>True when any aggregate matches the predicate.</summary>
+    Task<bool> ExistsAsync(Expression<Func<TAggregate, bool>> predicate, CancellationToken cancellationToken = default);
 
     Task AddAsync(TAggregate aggregate, CancellationToken cancellationToken = default);
 

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using ReturnLoad.Application.Abstractions.Persistence;
 using ReturnLoad.Domain.Common;
@@ -18,6 +19,14 @@ internal sealed class EfRepository<TAggregate> : IRepository<TAggregate>
 
     public async Task<TAggregate?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         await _db.Set<TAggregate>().FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
+
+    public async Task<IReadOnlyList<TAggregate>> ListAsync(
+        Expression<Func<TAggregate, bool>> predicate,
+        CancellationToken cancellationToken = default) =>
+        await _db.Set<TAggregate>().Where(predicate).ToListAsync(cancellationToken);
+
+    public Task<bool> ExistsAsync(Expression<Func<TAggregate, bool>> predicate, CancellationToken cancellationToken = default) =>
+        _db.Set<TAggregate>().AnyAsync(predicate, cancellationToken);
 
     public async Task AddAsync(TAggregate aggregate, CancellationToken cancellationToken = default) =>
         await _db.Set<TAggregate>().AddAsync(aggregate, cancellationToken);
