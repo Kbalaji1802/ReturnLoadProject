@@ -29,4 +29,12 @@ public sealed class DriversController : ControllerBase
         var result = await _drivers.RegisterAsync(authUserId, request, cancellationToken);
         return result.ToApiResult(HttpContext, "Driver registered.");
     }
+
+    /// <summary>Lists drivers (Operations review view).</summary>
+    [HttpGet]
+    public async Task<IActionResult> List(CancellationToken cancellationToken)
+    {
+        var result = await _drivers.ListAsync(cancellationToken);
+        return result.ToApiResult(HttpContext);
+    }
 }

@@ -35,6 +35,9 @@ public interface IDocumentService
     Task<Result> RejectAsync(Guid documentId, string reason, CancellationToken cancellationToken = default);
 
     Task<Result<IReadOnlyList<DocumentView>>> ListForOwnerAsync(DocumentOwnerType ownerType, Guid ownerId, CancellationToken cancellationToken = default);
+
+    /// <summary>The Operations review queue — documents awaiting a verification decision.</summary>
+    Task<Result<IReadOnlyList<DocumentView>>> ListPendingAsync(CancellationToken cancellationToken = default);
 }
 
 internal sealed class DocumentService : IDocumentService
@@ -128,9 +131,17 @@ internal sealed class DocumentService : IDocumentService
         IReadOnlyList<Document> docs = await _documents.ListAsync(
             d => d.OwnerType == ownerType && d.OwnerId == ownerId, cancellationToken);
 
-        IReadOnlyList<DocumentView> views = docs
-            .Select(d => new DocumentView(d.Id, d.OwnerType, d.OwnerId, d.Type, d.VerificationStatus, d.ExpiresOn))
-            .ToList();
-        return Result<IReadOnlyList<DocumentView>>.Success(views);
+        return Result<IReadOnlyList<DocumentView>>.Success(docs.Select(Map).ToList());
     }
+
+    public async Task<Result<IReadOnlyList<DocumentView>>> ListPendingAsync(CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Document> docs = await _documents.ListAsync(
+            d => d.VerificationStatus == VerificationStatus.Submitted || d.VerificationStatus == VerificationStatus.UnderReview,
+            cancellationToken);
+        return Result<IReadOnlyList<DocumentView>>.Success(docs.Select(Map).ToList());
+    }
+
+    private static DocumentView Map(Document d) =>
+        new(d.Id, d.OwnerType, d.OwnerId, d.Type, d.VerificationStatus, d.ExpiresOn);
 }

@@ -1,58 +1,37 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
+import { Component } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
-import { MatIconModule } from '@angular/material/icon';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatButtonModule } from '@angular/material/button';
+import { RouterLink } from '@angular/router';
 
-import { ApiEnvelope, HealthStatus } from '../../core/api/api.models';
-import { ApiService } from '../../core/api/api.service';
-
-interface Kpi {
-  readonly label: string;
-  readonly value: number;
-}
-
-/**
- * Foundation dashboard. Demonstrates the console's building blocks — Angular
- * Signals for reactive state and a typed API call — without any business logic.
- * The live KPI wiring arrives with the observability task (T-050).
- */
+/** Landing overview with quick links into the operational areas. */
 @Component({
   selector: 'app-dashboard',
-  imports: [MatCardModule, MatButtonModule, MatIconModule, MatProgressBarModule],
-  templateUrl: './dashboard.html',
-  styleUrl: './dashboard.scss',
+  imports: [MatCardModule, MatButtonModule, RouterLink],
+  template: `
+    <h1>Dashboard</h1>
+    <div class="tiles">
+      <mat-card>
+        <mat-card-header><mat-card-title>Drivers</mat-card-title></mat-card-header>
+        <mat-card-content>Review drivers and verification status.</mat-card-content>
+        <mat-card-actions><a mat-button routerLink="/drivers">Open</a></mat-card-actions>
+      </mat-card>
+      <mat-card>
+        <mat-card-header><mat-card-title>Documents</mat-card-title></mat-card-header>
+        <mat-card-content>Approve pending KYC / RC / licence documents.</mat-card-content>
+        <mat-card-actions><a mat-button routerLink="/documents">Open</a></mat-card-actions>
+      </mat-card>
+      <mat-card>
+        <mat-card-header><mat-card-title>Loads</mat-card-title></mat-card-header>
+        <mat-card-content>Browse loads posted to the marketplace.</mat-card-content>
+        <mat-card-actions><a mat-button routerLink="/loads">Open</a></mat-card-actions>
+      </mat-card>
+      <mat-card>
+        <mat-card-header><mat-card-title>Trips</mat-card-title></mat-card-header>
+        <mat-card-content>Track and complete trips.</mat-card-content>
+        <mat-card-actions><a mat-button routerLink="/trips">Open</a></mat-card-actions>
+      </mat-card>
+    </div>
+  `,
+  styles: [`h1 { margin: 0 0 1rem; } .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }`],
 })
-export class Dashboard {
-  private readonly api = inject(ApiService);
-
-  protected readonly kpis = signal<readonly Kpi[]>([
-    { label: 'Active drivers', value: 0 },
-    { label: 'Open loads', value: 0 },
-    { label: 'Matches today', value: 0 },
-  ]);
-
-  /** A computed signal, to show derived reactive state end-to-end. */
-  protected readonly metricsTracked = computed(() => this.kpis().length);
-
-  protected readonly loading = signal(false);
-  protected readonly health = signal<HealthStatus | null>(null);
-  protected readonly error = signal<string | null>(null);
-
-  protected checkApiHealth(): void {
-    this.loading.set(true);
-    this.health.set(null);
-    this.error.set(null);
-
-    this.api.get<ApiEnvelope<HealthStatus>>('health').subscribe({
-      next: (response) => {
-        this.health.set(response.data);
-        this.loading.set(false);
-      },
-      error: () => {
-        this.error.set('The API is unreachable. Start the backend and try again.');
-        this.loading.set(false);
-      },
-    });
-  }
-}
+export class Dashboard {}

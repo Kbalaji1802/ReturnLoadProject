@@ -47,6 +47,15 @@ public sealed class DocumentsController : ControllerBase
         return result.ToApiResult(HttpContext);
     }
 
+    /// <summary>The Operations review queue.</summary>
+    [HttpGet("pending")]
+    [Authorize(Policy = AuthorizationPolicies.CanVerifyDocuments)]
+    public async Task<IActionResult> Pending(CancellationToken cancellationToken)
+    {
+        var result = await _documents.ListPendingAsync(cancellationToken);
+        return result.ToApiResult(HttpContext);
+    }
+
     /// <summary>Operations approves a document (verifies the driver when a licence is approved).</summary>
     [HttpPost("{id:guid}/approve")]
     [Authorize(Policy = AuthorizationPolicies.CanVerifyDocuments)]

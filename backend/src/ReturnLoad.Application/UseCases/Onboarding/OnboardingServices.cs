@@ -15,6 +15,8 @@ public sealed record RegisterDriverRequest(
 
 public sealed record DriverRegistrationResult(Guid DriverProfileId, Guid UserProfileId);
 
+public sealed record DriverSummary(Guid Id, Guid UserProfileId, string Licence, DriverStatus Status);
+
 public sealed record RegisterVehicleRequest(
     Guid CarrierId, string RegistrationNumber, VehicleType Type, decimal MaxPayloadKg, decimal? VolumeCubicMetres);
 
@@ -54,6 +56,9 @@ internal sealed class CarrierService : ICarrierService
 public interface IDriverOnboardingService
 {
     Task<Result<DriverRegistrationResult>> RegisterAsync(Guid authUserId, RegisterDriverRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Lists drivers (Operations view — e.g. verification queue).</summary>
+    Task<Result<IReadOnlyList<DriverSummary>>> ListAsync(CancellationToken cancellationToken = default);
 }
 
 internal sealed class DriverOnboardingService : IDriverOnboardingService
@@ -116,6 +121,15 @@ internal sealed class DriverOnboardingService : IDriverOnboardingService
 
         await _uow.SaveChangesAsync(cancellationToken);
         return new DriverRegistrationResult(driver.Id, profile.Id);
+    }
+
+    public async Task<Result<IReadOnlyList<DriverSummary>>> ListAsync(CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<DriverProfile> drivers = await _drivers.ListAsync(_ => true, cancellationToken);
+        IReadOnlyList<DriverSummary> summaries = drivers
+            .Select(d => new DriverSummary(d.Id, d.UserProfileId, d.Licence.Value, d.Status))
+            .ToList();
+        return Result<IReadOnlyList<DriverSummary>>.Success(summaries);
     }
 }
 
