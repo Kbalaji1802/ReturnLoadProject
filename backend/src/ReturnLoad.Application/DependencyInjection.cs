@@ -3,6 +3,7 @@ using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using ReturnLoad.Application.UseCases.Documents;
 using ReturnLoad.Application.UseCases.Loads;
+using ReturnLoad.Application.UseCases.Matching;
 using ReturnLoad.Application.UseCases.Onboarding;
 using ReturnLoad.Application.UseCases.Trips;
 
@@ -33,6 +34,7 @@ public static class DependencyInjection
         services.AddScoped<IDocumentService, DocumentService>();
         services.AddScoped<ILoadService, LoadService>();
         services.AddScoped<ITripService, TripService>();
+        services.AddScoped<IMatchingService, MatchingService>();
 
         return services;
     }

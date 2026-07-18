@@ -5,6 +5,7 @@ using ReturnLoad.Api.Extensions;
 using ReturnLoad.Api.Http;
 using ReturnLoad.Application.Identity;
 using ReturnLoad.Application.UseCases.Loads;
+using ReturnLoad.Application.UseCases.Matching;
 
 namespace ReturnLoad.Api.Controllers;
 
@@ -15,8 +16,13 @@ namespace ReturnLoad.Api.Controllers;
 public sealed class LoadsController : ControllerBase
 {
     private readonly ILoadService _loads;
+    private readonly IMatchingService _matching;
 
-    public LoadsController(ILoadService loads) => _loads = loads;
+    public LoadsController(ILoadService loads, IMatchingService matching)
+    {
+        _loads = loads;
+        _matching = matching;
+    }
 
     /// <summary>Shipper posts a load.</summary>
     [HttpPost]
@@ -32,11 +38,28 @@ public sealed class LoadsController : ControllerBase
         return result.ToApiResult(HttpContext, "Load posted.");
     }
 
-    /// <summary>Browse available (posted) loads.</summary>
+    /// <summary>The full posted-loads board (internal ops view). A driver uses <c>matched</c>.</summary>
     [HttpGet("available")]
+    [Authorize(Policy = AuthorizationPolicies.InternalStaff)]
     public async Task<IActionResult> Available(CancellationToken cancellationToken)
     {
         var result = await _loads.BrowseAvailableAsync(cancellationToken);
+        return result.ToApiResult(HttpContext);
+    }
+
+    /// <summary>
+    /// The posted loads the authenticated driver's fleet can actually carry — the matching
+    /// engine's compatible set, not the whole board (MATCHING_ENGINE hard filters). Zero is valid.
+    /// </summary>
+    [HttpGet("matched")]
+    public async Task<IActionResult> Matched(CancellationToken cancellationToken)
+    {
+        if (!HttpContext.TryGetUserId(out Guid authUserId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _matching.FindCompatibleLoadsAsync(authUserId, cancellationToken);
         return result.ToApiResult(HttpContext);
     }
 
