@@ -23,6 +23,36 @@
 
 ---
 
+## ADR-0016 — MVP sprint (M4): application services, clients, GPS/payments placeholders
+- **Date:** 2026-07-18
+- **Status:** Accepted
+- **Context:** The MVP sprint builds runnable end-to-end flows (onboarding → verification →
+  load → trip) across backend, Angular admin, and Flutter mobile, on the M3.5 model.
+- **Decision:**
+  1. **Application-service use-cases** (not MediatR/CQRS): plain interfaces + internal
+     implementations in `Application/UseCases/*`, over `IRepository<T>`/`IUnitOfWork`,
+     returning `Result`. Controllers stay thin; the M1 envelope + M1.5 hardening + M2
+     policy authorization are preserved. `DomainException` now maps to HTTP 400.
+  2. **Angular admin** (standalone, zoneless, Material): JWT `AuthService` + functional
+     HTTP interceptor + `authGuard`; envelope-unwrapping `ApiService`; login + shell +
+     drivers/documents(approve)/loads/trips/settings. Verified via `ng build`.
+  3. **Flutter mobile** (Riverpod + GoRouter + Dio + secure storage): login → dashboard →
+     loads(accept) → tracking, token via secure storage + Dio interceptor. **Not
+     build-verified — the Flutter SDK is not installed in this environment.**
+  4. **GPS:** no Maps API key configured, so the tracking screen shows the real recorded
+     tracking points + a clear "Maps integration pending API key" banner — **no fake live
+     map** is rendered. A map widget replaces the banner when a key is supplied.
+  5. **Payments:** `IPaymentService` **interfaces only** (ADR-0005 reaffirmed — the
+     platform records commission, does not hold funds); no gateway.
+  6. **Dev seeding:** Development startup migrates + seeds demo users/roles/carrier/shipper
+     profile (resilient if the DB is down). A dev-only AES key enables Aadhaar-at-rest.
+- **Consequences:** Backend + admin are build- and test-verified (147 backend tests; ng
+  build green). The mobile app is written to the same contracts but unverified pending a
+  Flutter SDK. Live PostgreSQL run + a browser/device click-through remain a manual step
+  (Docker is available; instructions provided). List/query endpoints exist only where the
+  console needs them (drivers, pending documents, available loads); broader querying grows
+  per feature. Aadhaar/email/etc. remain governed by earlier ADRs.
+
 ## ADR-0015 — Persistence foundation (M3.5): EF Core mapping, encryption, concurrency
 - **Date:** 2026-07-12
 - **Status:** Accepted

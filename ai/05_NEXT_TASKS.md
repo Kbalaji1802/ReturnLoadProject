@@ -18,7 +18,8 @@ Coarse, communication-friendly milestones, each owned by one **bounded context**
 | **M2** | **Authentication** — identity, JWT, refresh tokens, roles, permissions, authorization policies | Identity | ✅ Done (ADR-0013) |
 | **M3** | **Core Domain Model** — all business aggregates, value objects, enums, domain events (Domain layer only) | All | ✅ Done (ADR-0014) |
 | **M3.5** | **Persistence** — EF Core configurations + migration for the M3 model; repositories; encryption; concurrency | All | ✅ Done (ADR-0015) |
-| **M4** | **Identity & Onboarding APIs** — Carrier/UserProfile/Driver registration + verification flows on the persisted model | Identity/Fleet | ⏭️ **Next (recommended)** |
+| **M4** | **MVP Sprint** — onboarding/documents/loads/trips APIs + Angular admin (verified) + Flutter mobile (written, SDK absent) | Identity/Fleet/Loads/Trips | 🟢 Backend+Admin done (ADR-0016) |
+| **M4.1** | **Live run + click-through** — docker Postgres, browser/device demo, Flutter build once SDK available | Platform | ⏭️ **Next** |
 | **M5** | Vehicle | Fleet | ⬜ |
 | **M6** | Documents (KYC / RC / insurance / licence / permit) — uses `IFileStorageService` (ADR-0012) | Documents | ⬜ |
 | **M7** | GPS / location | Tracking | ⬜ |

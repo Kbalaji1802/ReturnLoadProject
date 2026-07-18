@@ -7,42 +7,36 @@
 
 ## Active task
 
-**M3.5 — Persistence Foundation** — ✅ **COMPLETE, awaiting review.**
-(Decisions in **ADR-0015**. Prior: M0–M3 ✅; M3 domain model = ADR-0014.)
+**M4 — MVP Sprint (application layer + clients)** — 🟢 **Backend + Admin done & verified;
+Mobile written (unverified); live click-through pending.** (Decisions in **ADR-0016**.)
 
-### Goal
-Persist every M3 aggregate with EF Core + PostgreSQL — mapping, security, integrity —
-with **no business logic, APIs, or UI**.
+### Verified this sprint
+- **Backend APIs** (Application services + REST): carriers, drivers (register + list),
+  vehicles (register/activate), documents (upload + pending + approve→driver verified +
+  reject), loads (post/browse/get/accept), trips (create/get/advance/tracking). Envelope,
+  M1.5 hardening, M2 policy authz, `DomainException`→400. **147 tests green** incl. a full
+  onboarding→verify→load→trip service+SQLite flow test.
+- **Angular admin**: login + guard + interceptor + shell + dashboard/drivers/documents/
+  loads/trips/settings. **`ng build` succeeds.**
+- **Demo seeding** (Development): admin/carrier/driver/shipper users + roles + demo carrier
+  + shipper profile.
 
-### Delivered
-- **EF configurations** for all 13 aggregates (Infrastructure): value converters for
-  single-value VOs, owned types for multi-field VOs (incl. nested `ReturnLeg`), enums as
-  text.
-- **Security:** Aadhaar **encrypted at rest** (AES-GCM `IFieldEncryptor`; key from secret
-  store). Sensitive file identifiers reference storage keys only (ADR-0012).
-- **Integrity conventions** via shadow props + SaveChanges interceptor: **soft delete**
-  (+ global query filter), **audit** fields, **app-managed `Version` concurrency token**.
-- **Indexes:** unique (Mobile, Email, Registration, Licence, AuthUserId); normal (Driver/
-  Vehicle/Load/Trip status); composite (Tracking `TripId+CapturedAtUtc`, `Driver+Vehicle`,
-  Load `Shipper+Status`, Document `Owner`, etc.). **FKs** on every aggregate reference.
-- **Repositories:** `IRepository<T>` + `IUnitOfWork` (Application) with EF implementations
-  (Infrastructure).
-- **Migration** `M3_5_Persistence` — 13 tables, symmetric `Down`; SQL script generates.
-- **Tests:** **146 green** (110 unit, 26 integration incl. 8 SQLite persistence tests —
-  mapping/VO/enum/encryption/uniqueness/FK/concurrency/soft-delete — 10 architecture).
+### Written but NOT build-verified
+- **Flutter mobile** (login → dashboard → loads(accept) → tracking): the **Flutter SDK is
+  not installed here**, so it compiles-in-principle but is unverified. Same API contracts.
 
-### NOT built (by instruction)
-Driver/Vehicle/Load APIs, services, GPS, matching, payments, notifications delivery,
-Flutter, Angular.
+### Placeholders (external services not configured)
+- **Maps/GPS:** tracking screen shows real recorded points + "Maps integration pending API
+  key" banner (no fake live map).
+- **Payments:** `IPaymentService` interfaces only (ADR-0005). **SMS/OTP / email:** not wired.
 
-### Known follow-ups (deferred, honest)
-- Live PostgreSQL apply/rollback + a real-DB integration run → local Docker env (T-010);
-  the migration SQL is generated and mapping is proven on SQLite.
-- Geo pickup/drop indexing → PostGIS spatial indexes in the geo/matching milestone.
+### Not yet done
+- Live PostgreSQL run + browser/device click-through (Docker is available; see README/report).
+- Matching engine, real GPS ingestion, notifications delivery, shipper mobile flows.
 
 ### Status
-**AWAITING CO-FOUNDER REVIEW.** Recommended next: **M4 — Identity & Onboarding APIs**
-(application/API layer for Carrier/Driver/UserProfile on the now-persisted model).
+Sprint increment committed. Next: stand up Postgres (docker compose) for a live run, then
+the matching engine (M9) or hardening of the onboarding APIs.
 
 ---
 
