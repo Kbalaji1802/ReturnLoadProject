@@ -22,19 +22,20 @@ export interface AuthTokens {
   refreshTokenExpiresAt: string;
 }
 
+// Enum fields are serialised by the API as integers; the console maps them via core/api/enums.ts.
 export interface DriverSummary {
   id: string;
   userProfileId: string;
   licence: string;
-  status: string;
+  status: number;
 }
 
 export interface DocumentView {
   id: string;
-  ownerType: string;
+  ownerType: number;
   ownerId: string;
-  type: string;
-  verificationStatus: string;
+  type: number;
+  verificationStatus: number;
   expiresOn: string | null;
 }
 
@@ -45,10 +46,10 @@ export interface LoadView {
   destinationAddress: string | null;
   pickupStart: string;
   pickupEnd: string;
-  cargoType: string;
+  cargoType: number;
   weightKg: number;
   offeredPriceInr: number | null;
-  status: string;
+  status: number;
 }
 
 /** Payload of GET /api/v1/health. */
