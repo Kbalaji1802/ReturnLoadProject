@@ -32,13 +32,23 @@ class AuthRepository {
     );
 
     final String token = response.data['data']['accessToken'] as String;
-    await _ref.read(_secureStorageProvider).write(key: _tokenKey, value: token);
+    // Set the in-memory token first so login always succeeds once authenticated;
+    // persisting it is best-effort (the web secure-storage backend can be flaky).
     _ref.read(authTokenProvider.notifier).state = token;
+    try {
+      await _ref.read(_secureStorageProvider).write(key: _tokenKey, value: token);
+    } catch (_) {
+      // Non-fatal: token stays in memory for this session.
+    }
   }
 
   Future<void> restore() async {
-    final String? token = await _ref.read(_secureStorageProvider).read(key: _tokenKey);
-    _ref.read(authTokenProvider.notifier).state = token;
+    try {
+      final String? token = await _ref.read(_secureStorageProvider).read(key: _tokenKey);
+      _ref.read(authTokenProvider.notifier).state = token;
+    } catch (_) {
+      // Ignore storage errors on restore.
+    }
   }
 
   Future<void> logout() async {
