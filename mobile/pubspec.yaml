@@ -29,6 +29,11 @@ dependencies:
   # (OFFLINE_STRATEGY.md §3, 01_PROJECT_RULES.md §5).
   flutter_secure_storage: ^9.2.2
 
+  # Premium UI: Inter typography, loading shimmer, document capture.
+  google_fonts: ^6.2.1
+  shimmer: ^3.0.0
+  image_picker: ^1.1.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
