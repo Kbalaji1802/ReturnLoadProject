@@ -36,7 +36,7 @@ public sealed class DocumentsController : ControllerBase
 
         SubmitDocumentRequest request = new(ownerType, ownerId, type, documentNumber, IssuedOn: null, ExpiresOn: expiresOn);
         await using Stream content = file.OpenReadStream();
-        var result = await _documents.SubmitAsync(request, content, file.FileName, file.ContentType, cancellationToken);
+        var result = await _documents.SubmitAsync(request, content, file.FileName, file.ContentType, file.Length, cancellationToken);
         return result.ToApiResult(HttpContext, "Document uploaded.");
     }
 

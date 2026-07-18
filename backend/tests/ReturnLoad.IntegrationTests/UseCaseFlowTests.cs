@@ -93,7 +93,7 @@ public sealed class UseCaseFlowTests : IDisposable
         using MemoryStream file = new(Encoding.UTF8.GetBytes("dummy-pdf"));
         Guid documentId = (await documents.SubmitAsync(
             new SubmitDocumentRequest(DocumentOwnerType.Driver, driver.DriverProfileId, DocumentType.DrivingLicence, "DL-1", null, new DateOnly(2030, 1, 1)),
-            file, "licence.pdf", "application/pdf")).Value;
+            file, "licence.pdf", "application/pdf", file.Length)).Value;
 
         Result approve = await documents.ApproveAsync(documentId);
         Assert.True(approve.IsSuccess);

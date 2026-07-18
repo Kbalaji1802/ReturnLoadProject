@@ -27,7 +27,7 @@ public sealed record DocumentView(
 
 public interface IDocumentService
 {
-    Task<Result<Guid>> SubmitAsync(SubmitDocumentRequest request, Stream content, string fileName, string contentType, CancellationToken cancellationToken = default);
+    Task<Result<Guid>> SubmitAsync(SubmitDocumentRequest request, Stream content, string fileName, string contentType, long sizeBytes, CancellationToken cancellationToken = default);
 
     /// <summary>Operations approves a document; approving a driver's licence verifies the driver.</summary>
     Task<Result> ApproveAsync(Guid documentId, CancellationToken cancellationToken = default);
@@ -63,9 +63,11 @@ internal sealed class DocumentService : IDocumentService
     }
 
     public async Task<Result<Guid>> SubmitAsync(
-        SubmitDocumentRequest request, Stream content, string fileName, string contentType, CancellationToken cancellationToken = default)
+        SubmitDocumentRequest request, Stream content, string fileName, string contentType, long sizeBytes, CancellationToken cancellationToken = default)
     {
-        long size = content.CanSeek ? content.Length : 0;
+        // The caller supplies the size (upload streams are often non-seekable, so
+        // content.Length is unreliable here).
+        long size = sizeBytes > 0 ? sizeBytes : (content.CanSeek ? content.Length : 0);
         IReadOnlyList<ApiError> errors = FileUploadValidator.Validate(fileName, contentType, size, _uploadOptions);
         if (errors.Count > 0)
         {
