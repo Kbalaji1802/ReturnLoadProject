@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ReturnLoad.Api.Extensions;
 using ReturnLoad.Api.Http;
+using ReturnLoad.Application.Identity;
 using ReturnLoad.Application.UseCases.Onboarding;
 
 namespace ReturnLoad.Api.Controllers;
@@ -30,8 +31,22 @@ public sealed class DriversController : ControllerBase
         return result.ToApiResult(HttpContext, "Driver registered.");
     }
 
-    /// <summary>Lists drivers (Operations review view).</summary>
+    /// <summary>The caller's own driver profile (id + verification status).</summary>
+    [HttpGet("me")]
+    public async Task<IActionResult> Me(CancellationToken cancellationToken)
+    {
+        if (!HttpContext.TryGetUserId(out Guid authUserId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _drivers.GetForUserAsync(authUserId, cancellationToken);
+        return result.ToApiResult(HttpContext);
+    }
+
+    /// <summary>Lists drivers (internal review view). Staff-only — a driver uses <c>me</c>.</summary>
     [HttpGet]
+    [Authorize(Policy = AuthorizationPolicies.InternalStaff)]
     public async Task<IActionResult> List(CancellationToken cancellationToken)
     {
         var result = await _drivers.ListAsync(cancellationToken);

@@ -59,6 +59,13 @@ public interface IDriverOnboardingService
 
     /// <summary>Lists drivers (Operations view — e.g. verification queue).</summary>
     Task<Result<IReadOnlyList<DriverSummary>>> ListAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The caller's own driver profile, resolved from their authenticated user id. Lets a
+    /// driver client obtain <b>its own</b> id (e.g. to scope document uploads) instead of
+    /// guessing from the drivers list — closing the cross-user attachment hole (M4.2 §8 S1).
+    /// </summary>
+    Task<Result<DriverSummary>> GetForUserAsync(Guid authUserId, CancellationToken cancellationToken = default);
 }
 
 internal sealed class DriverOnboardingService : IDriverOnboardingService
@@ -130,6 +137,18 @@ internal sealed class DriverOnboardingService : IDriverOnboardingService
             .Select(d => new DriverSummary(d.Id, d.UserProfileId, d.Licence.Value, d.Status))
             .ToList();
         return Result<IReadOnlyList<DriverSummary>>.Success(summaries);
+    }
+
+    public async Task<Result<DriverSummary>> GetForUserAsync(Guid authUserId, CancellationToken cancellationToken = default)
+    {
+        UserProfile? profile = (await _users.ListAsync(u => u.AuthUserId == authUserId, cancellationToken)).FirstOrDefault();
+        DriverProfile? driver = profile is null
+            ? null
+            : (await _drivers.ListAsync(d => d.UserProfileId == profile.Id, cancellationToken)).FirstOrDefault();
+
+        return driver is null
+            ? Error.NotFound("This account does not have a driver profile yet.")
+            : new DriverSummary(driver.Id, driver.UserProfileId, driver.Licence.Value, driver.Status);
     }
 }
 

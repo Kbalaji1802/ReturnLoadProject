@@ -2,8 +2,10 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ReturnLoad.Api.Extensions;
+using ReturnLoad.Api.Http;
 using ReturnLoad.Application.Identity;
 using ReturnLoad.Application.UseCases.Documents;
+using ReturnLoad.Application.UseCases.Onboarding;
 using ReturnLoad.Domain.Documents;
 
 namespace ReturnLoad.Api.Controllers;
@@ -15,11 +17,57 @@ namespace ReturnLoad.Api.Controllers;
 public sealed class DocumentsController : ControllerBase
 {
     private readonly IDocumentService _documents;
+    private readonly IDriverOnboardingService _drivers;
 
-    public DocumentsController(IDocumentService documents) => _documents = documents;
+    public DocumentsController(IDocumentService documents, IDriverOnboardingService drivers)
+    {
+        _documents = documents;
+        _drivers = drivers;
+    }
 
-    /// <summary>Uploads a document (multipart) for a driver/vehicle/carrier owner.</summary>
+    /// <summary>
+    /// A driver uploads one of <b>their own</b> documents (multipart). The owning driver is
+    /// resolved from the authenticated token — the client never supplies an owner id, so a
+    /// document can only ever attach to the caller's profile (closes M4.2 §8 S1).
+    /// </summary>
+    [HttpPost("driver-upload")]
+    public async Task<IActionResult> DriverUpload(
+        [FromForm] DocumentType type,
+        [FromForm] string? documentNumber,
+        [FromForm] DateOnly? expiresOn,
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest();
+        }
+
+        if (!HttpContext.TryGetUserId(out Guid authUserId))
+        {
+            return Unauthorized();
+        }
+
+        var driver = await _drivers.GetForUserAsync(authUserId, cancellationToken);
+        if (driver.IsFailure)
+        {
+            return driver.ToApiResult(HttpContext);
+        }
+
+        SubmitDocumentRequest request = new(
+            DocumentOwnerType.Driver, driver.Value.Id, type, documentNumber, IssuedOn: null, ExpiresOn: expiresOn);
+        await using Stream content = file.OpenReadStream();
+        var result = await _documents.SubmitAsync(request, content, file.FileName, file.ContentType, file.Length, cancellationToken);
+        return result.ToApiResult(HttpContext, "Document uploaded.");
+    }
+
+    /// <summary>
+    /// Staff attaches a document for any owner (driver/vehicle/carrier) during onboarding —
+    /// e.g. Operations acting on behalf of a party. A self-service driver uses
+    /// <see cref="DriverUpload"/>; this arbitrary-owner path is staff-only.
+    /// </summary>
     [HttpPost("upload")]
+    [Authorize(Policy = AuthorizationPolicies.InternalStaff)]
     public async Task<IActionResult> Upload(
         [FromForm] DocumentOwnerType ownerType,
         [FromForm] Guid ownerId,
