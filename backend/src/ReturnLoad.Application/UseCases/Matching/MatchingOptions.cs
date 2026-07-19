@@ -23,4 +23,8 @@ public sealed class MatchingOptions
 
     /// <summary>Weight of haul length (earning potential).</summary>
     public int HaulWeight { get; set; } = 15;
+
+    /// <summary>Bonus weight for a well-reviewed load owner (partner reputation, M8). Additive;
+    /// the final score is clamped to 100.</summary>
+    public int RatingWeight { get; set; } = 10;
 }

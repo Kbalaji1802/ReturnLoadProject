@@ -7,6 +7,7 @@ using ReturnLoad.Application.UseCases.Loads;
 using ReturnLoad.Application.UseCases.Matching;
 using ReturnLoad.Application.UseCases.Notifications;
 using ReturnLoad.Application.UseCases.Onboarding;
+using ReturnLoad.Application.UseCases.Reviews;
 using ReturnLoad.Application.UseCases.Tracking;
 using ReturnLoad.Application.UseCases.Trips;
 
@@ -41,6 +42,7 @@ public static class DependencyInjection
         services.AddScoped<IMatchingService, MatchingService>();
         services.AddScoped<IBookingService, BookingService>();
         services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IReviewService, ReviewService>();
 
         return services;
     }

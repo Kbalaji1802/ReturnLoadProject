@@ -1,5 +1,6 @@
 using ReturnLoad.Application.Abstractions.Persistence;
 using ReturnLoad.Application.UseCases.Notifications;
+using ReturnLoad.Application.UseCases.Reviews;
 using ReturnLoad.Domain.Bookings;
 using ReturnLoad.Domain.Fleet;
 using ReturnLoad.Domain.Identity;
@@ -12,7 +13,7 @@ namespace ReturnLoad.Application.UseCases.Bookings;
 public sealed record BookingRequestView(
     Guid Id, Guid LoadId, Guid DriverProfileId, Guid VehicleId,
     BookingRequestStatus Status, DateTimeOffset CreatedAtUtc, DateTimeOffset? DecidedAtUtc,
-    string? DriverName, string? VehicleRegistration);
+    string? DriverName, string? VehicleRegistration, double? DriverRating = null);
 
 /// <summary>
 /// The booking-request workflow (M4.3 Steps 3–4): a verified driver requests a load with one of
@@ -51,6 +52,7 @@ internal sealed class BookingService : IBookingService
     private readonly IRepository<Load> _loads;
     private readonly IRepository<Trip> _trips;
     private readonly INotificationService _notify;
+    private readonly IReviewService _reviews;
     private readonly IUnitOfWork _uow;
 
     public BookingService(
@@ -62,6 +64,7 @@ internal sealed class BookingService : IBookingService
         IRepository<Load> loads,
         IRepository<Trip> trips,
         INotificationService notify,
+        IReviewService reviews,
         IUnitOfWork uow)
     {
         _bookings = bookings;
@@ -72,6 +75,7 @@ internal sealed class BookingService : IBookingService
         _loads = loads;
         _trips = trips;
         _notify = notify;
+        _reviews = reviews;
         _uow = uow;
     }
 
@@ -285,12 +289,27 @@ internal sealed class BookingService : IBookingService
         foreach (BookingRequest b in list)
         {
             DriverProfile? driver = await _drivers.GetByIdAsync(b.DriverProfileId, cancellationToken);
-            string? driverName = driver is null ? null : (await _users.GetByIdAsync(driver.UserProfileId, cancellationToken))?.FullName;
+            string? driverName = null;
+            double? driverRating = null;
+            if (driver is not null)
+            {
+                driverName = (await _users.GetByIdAsync(driver.UserProfileId, cancellationToken))?.FullName;
+                RatingSummary summary = await _reviews.GetSummaryAsync(driver.UserProfileId, cancellationToken);
+                driverRating = summary.Count > 0 ? summary.Average : null;
+            }
+
             Vehicle? vehicle = await _vehicles.GetByIdAsync(b.VehicleId, cancellationToken);
-            views.Add(Map(b) with { DriverName = driverName, VehicleRegistration = vehicle?.Registration.Value });
+            views.Add(Map(b) with { DriverName = driverName, VehicleRegistration = vehicle?.Registration.Value, DriverRating = driverRating });
         }
 
-        return Result<IReadOnlyList<BookingRequestView>>.Success(views);
+        // Show pending requests first, best-rated drivers on top (a preferred-partner signal).
+        List<BookingRequestView> ordered = views
+            .OrderBy(v => v.Status == BookingRequestStatus.Pending ? 0 : 1)
+            .ThenByDescending(v => v.DriverRating ?? 0)
+            .ThenBy(v => v.CreatedAtUtc)
+            .ToList();
+
+        return Result<IReadOnlyList<BookingRequestView>>.Success(ordered);
     }
 
     public async Task<Result<IReadOnlyList<BookingRequestView>>> ListAllAsync(CancellationToken cancellationToken = default)

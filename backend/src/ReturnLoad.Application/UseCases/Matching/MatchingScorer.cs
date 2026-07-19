@@ -21,7 +21,8 @@ public static class MatchingScorer
     /// <paramref name="vehicleCapacityKg"/>. When the driver's current location is known, pickup
     /// proximity dominates; otherwise that weight is applied neutrally so ranking still works.
     /// </summary>
-    public static MatchScore Score(Load load, decimal vehicleCapacityKg, double? driverLat, double? driverLng, MatchingOptions options)
+    public static MatchScore Score(
+        Load load, decimal vehicleCapacityKg, double? driverLat, double? driverLng, MatchingOptions options, double? partnerRating = null)
     {
         ArgumentNullException.ThrowIfNull(load);
         ArgumentNullException.ThrowIfNull(options);
@@ -54,9 +55,18 @@ public static class MatchingScorer
             reasons.Add($"{distance:0} km haul");
         }
 
+        // 4) Partner reputation — a load from a well-reviewed owner ranks higher (additive).
+        double ratingFactor = 0;
+        if (partnerRating is double rating && rating > 0)
+        {
+            ratingFactor = Clamp01((rating - 1) / 4.0); // 1★→0, 5★→1
+            reasons.Add($"owner rated {rating:0.0}★");
+        }
+
         double raw = (proximityFactor * options.ProximityWeight)
             + (utilisation * options.UtilizationWeight)
-            + (haulFactor * options.HaulWeight);
+            + (haulFactor * options.HaulWeight)
+            + (ratingFactor * options.RatingWeight);
 
         int score = (int)Math.Round(Math.Clamp(raw, 0, 100));
         int stars = Math.Clamp((int)Math.Ceiling(score / 20.0), 1, 5);

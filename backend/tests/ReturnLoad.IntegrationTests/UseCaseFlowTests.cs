@@ -8,6 +8,7 @@ using ReturnLoad.Application.Abstractions.Geo;
 using ReturnLoad.Application.UseCases.Bookings;
 using ReturnLoad.Application.UseCases.Documents;
 using ReturnLoad.Application.UseCases.Notifications;
+using ReturnLoad.Application.UseCases.Reviews;
 using ReturnLoad.Application.UseCases.Tracking;
 using ReturnLoad.Application.UseCases.Loads;
 using ReturnLoad.Application.UseCases.Onboarding;
@@ -222,6 +223,26 @@ public sealed class UseCaseFlowTests : IDisposable
 
         IReadOnlyList<NotificationView> ownerInbox = (await notifications.ListMineAsync(shipperAuthId)).Value;
         Assert.Contains(ownerInbox, n => n.Subject == "New load request");
+
+        // M8: complete the trip, then both parties review each other; reputations reflect it.
+        foreach (TripStatus step in new[]
+        {
+            TripStatus.ArrivedPickup, TripStatus.Loaded, TripStatus.InTransit,
+            TripStatus.ArrivedDestination, TripStatus.Unloaded, TripStatus.Completed,
+        })
+        {
+            await trips.AdvanceAsync(accepted.Value, step);
+        }
+
+        IReviewService reviews = _provider.GetRequiredService<IReviewService>();
+        Assert.True((await reviews.SubmitAsync(driverAuthId, accepted.Value, new SubmitReviewRequest(5, "Great load owner"))).IsSuccess);
+        Assert.True((await reviews.SubmitAsync(shipperAuthId, accepted.Value, new SubmitReviewRequest(4, "Reliable driver"))).IsSuccess);
+
+        Assert.Equal(4, (await reviews.GetSummaryAsync(driver.UserProfileId)).Average);   // owner rated the driver 4
+        Assert.Equal(5, (await reviews.GetSummaryAsync(shipperProfile.Id)).Average);       // driver rated the owner 5
+
+        // A driver can't review the same trip twice.
+        Assert.True((await reviews.SubmitAsync(driverAuthId, accepted.Value, new SubmitReviewRequest(3, "dup"))).IsFailure);
     }
 
     [Fact]
