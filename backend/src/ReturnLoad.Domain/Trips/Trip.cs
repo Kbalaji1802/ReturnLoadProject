@@ -23,7 +23,8 @@ public sealed class Trip : AggregateRoot<Guid>
         Guid driverProfileId,
         Location origin,
         Location destination,
-        ReturnLeg returnLeg)
+        ReturnLeg returnLeg,
+        Guid? loadId)
         : base(id)
     {
         CarrierId = carrierId;
@@ -32,6 +33,7 @@ public sealed class Trip : AggregateRoot<Guid>
         Origin = origin;
         Destination = destination;
         ReturnLeg = returnLeg;
+        LoadId = loadId;
         Status = TripStatus.Created;
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
@@ -45,6 +47,10 @@ public sealed class Trip : AggregateRoot<Guid>
     public Guid VehicleId { get; }
 
     public Guid DriverProfileId { get; }
+
+    /// <summary>The load this trip fulfils, when created from an accepted booking (M6). Null for
+    /// manually-created trips. Lets the load owner track their shipment's trip.</summary>
+    public Guid? LoadId { get; }
 
     public Location Origin { get; } = null!;
 
@@ -66,7 +72,8 @@ public sealed class Trip : AggregateRoot<Guid>
         Guid driverProfileId,
         Location origin,
         Location destination,
-        ReturnLeg returnLeg)
+        ReturnLeg returnLeg,
+        Guid? loadId = null)
     {
         Guard.AgainstDefault(carrierId, "Carrier id", "trip_carrier_required");
         Guard.AgainstDefault(vehicleId, "Vehicle id", "trip_vehicle_required");
@@ -76,10 +83,13 @@ public sealed class Trip : AggregateRoot<Guid>
         ArgumentNullException.ThrowIfNull(returnLeg);
         Guard.Against(origin == destination, "Trip origin and destination must differ.", "trip_same_origin_destination");
 
-        Trip trip = new(Guid.NewGuid(), carrierId, vehicleId, driverProfileId, origin, destination, returnLeg);
+        Trip trip = new(Guid.NewGuid(), carrierId, vehicleId, driverProfileId, origin, destination, returnLeg, loadId);
         trip.Raise(new TripCreated(trip.Id, vehicleId, driverProfileId, trip.CreatedAtUtc));
         return trip;
     }
+
+    /// <summary>Whether this trip is currently on the road (past acceptance, before completion).</summary>
+    public bool IsActive => Status is not (TripStatus.Created or TripStatus.Completed or TripStatus.Cancelled);
 
     /// <summary>The ordered forward lifecycle (M4.3 Step 5). Cancelled is a branch, not in it.</summary>
     private static readonly TripStatus[] Lifecycle =

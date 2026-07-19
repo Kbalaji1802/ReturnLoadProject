@@ -6,6 +6,7 @@ using ReturnLoad.Application.UseCases.Documents;
 using ReturnLoad.Application.UseCases.Loads;
 using ReturnLoad.Application.UseCases.Matching;
 using ReturnLoad.Application.UseCases.Onboarding;
+using ReturnLoad.Application.UseCases.Tracking;
 using ReturnLoad.Application.UseCases.Trips;
 
 namespace ReturnLoad.Application;
@@ -35,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<IDocumentService, DocumentService>();
         services.AddScoped<ILoadService, LoadService>();
         services.AddScoped<ITripService, TripService>();
+        services.AddScoped<ITrackingService, TrackingService>();
         services.AddScoped<IMatchingService, MatchingService>();
         services.AddScoped<IBookingService, BookingService>();
 

@@ -23,6 +23,64 @@
 
 ---
 
+## ADR-0019 — Live GPS tracking architecture (M6)
+- **Date:** 2026-07-19
+- **Status:** Accepted
+- **Context:** Load owners need "where is my truck?" and matching needs the driver's real location.
+  This must scale from 10 to 10,000 drivers without redesign and never couple business logic to a
+  maps/GPS vendor.
+- **Decision:**
+  1. **Provider-agnostic domain:** the business layer knows only lat/lng/time/speed/heading/accuracy
+     (+ optional battery, source). The existing append-only `TrackingEvent` + `LocationPoint` VO are
+     reused (capture-time vs record-time preserved for offline truthfulness, OFFLINE_STRATEGY §7);
+     added `BatteryLevel` + `TrackingSource`. `Trip` gained `LoadId` so an owner can track their
+     shipment's trip.
+  2. **Secured ingestion:** `ITrackingService` in Application. `POST /trips/{id}/location` — **only
+     the assigned driver** may upload, **only while the trip is active**; coordinates validated by the
+     `GeoCoordinate` VO. Reads (`/tracking`, `/tracking/live`, `/tracking/summary`) are authorised to
+     the trip's driver, the load owner, or privileged internal staff.
+  3. **Analytics** (`TrackingAnalytics`, pure/tested): distance, duration, avg/max speed, idle time —
+     reserved for future AI (fuel, driver-behaviour). Live view derives distance-remaining + ETA.
+  4. **Adaptive, battery-aware capture** is client policy (idle 60s / moving 30s / fast 15s; or every
+     500 m) driven by **config, not hard-coded**; offline points queue locally and flush in order,
+     deduplicated. Dev maps use OpenStreetMap (`flutter_map`); a production maps/route adapter swaps
+     in behind the interface with keys from config (never committed).
+  5. **Matching** consumes the driver's current location automatically (device GPS) instead of a
+     manual city pick.
+- **Consequences:** Tracking is horizontally scalable (append-only writes, indexed by trip+time; a
+  time-series/partition store can back it later without domain change). Background-location (app
+  closed) + the local offline queue are the remaining client hardening; the seams exist.
+
+## ADR-0018 — Complete core workflow (M4.3/M4.4): booking requests + granular trip lifecycle
+- **Date:** 2026-07-19
+- **Status:** Accepted
+- **Context:** Instant-accept broke the real freight flow; a load owner needs to choose among drivers,
+  and a trip needs a real lifecycle.
+- **Decision:** Introduce the **BookingRequest** aggregate (Pending→Accepted/Rejected/Withdrawn):
+  verified drivers *request* a load with a verified vehicle; the load owner accepts one — which
+  **creates the Trip, assigns the load, and auto-rejects the rest**. Expand `TripStatus` to the full
+  journey (Created→DriverAccepted→DriverEnRoute→ArrivedPickup→Loaded→InTransit→ArrivedDestination→
+  Unloaded→Completed, +Cancelled), advanced one legal step at a time. Load stores platform-computed
+  `DistanceKm`/`EstimatedDuration`. Clients (mobile request flow + trip timeline + owner choose-driver;
+  admin vehicles/bookings/trips) wired to these; the old instant-accept API removed.
+- **Consequences:** The end-to-end journey is demonstrable from the UI. Load-owner verification queue
+  and in-app notifications remain future work.
+
+## ADR-0017 — Product workflow refactor (M4.2): role-based registration, geo, matching seams
+- **Date:** 2026-07-18
+- **Status:** Accepted
+- **Context:** A gap analysis found three root causes: registration granted no role, locations were
+  free-text with fabricated coordinates, and every posted load was shown to everyone.
+- **Decision:** Registration selects an **AccountType** (Driver | LoadOwner→Shipper) and grants that
+  role (public may never self-assign internal roles). Introduce **`ILocationSearchService` /
+  `IRouteService`** (OpenStreetMap dev impls, Google-swappable) for geocoding + road distance/ETA.
+  Add the **rules-based matching engine** (hard filters 1,2,6,7,8) so drivers see only compatible
+  loads; documents are self-scoped (close cross-user attach). Resolved ambiguities: login-while-pending
+  allowed, role≠verification, "Load Owner" is the `Shipper` role (UI label), owner-operator carrier
+  auto-created, no self-granted internal roles.
+- **Consequences:** The keystone for every later milestone. M5 adds ranking on the matching filters;
+  M6 feeds it live location.
+
 ## ADR-0016 — MVP sprint (M4): application services, clients, GPS/payments placeholders
 - **Date:** 2026-07-18
 - **Status:** Accepted

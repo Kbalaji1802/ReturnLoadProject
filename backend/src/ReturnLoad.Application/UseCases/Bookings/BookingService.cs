@@ -183,7 +183,7 @@ internal sealed class BookingService : IBookingService
         // The loaded journey pickup → drop; a placeholder return leg (drop → pickup) satisfies the
         // Trip's return-leg invariant until real return-leg posting lands.
         ReturnLeg returnLeg = ReturnLeg.Create(load.Destination, load.Origin, load.PickupWindow);
-        Trip trip = Trip.Create(request.CarrierId, request.VehicleId, request.DriverProfileId, load.Origin, load.Destination, returnLeg);
+        Trip trip = Trip.Create(request.CarrierId, request.VehicleId, request.DriverProfileId, load.Origin, load.Destination, returnLeg, load.Id);
         await _trips.AddAsync(trip, cancellationToken);
 
         // The load is now assigned to this driver.

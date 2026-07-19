@@ -19,7 +19,9 @@ public sealed class TrackingEvent : AggregateRoot<Guid>
         TrackingEventType type,
         LocationPoint point,
         DateTimeOffset capturedAtUtc,
-        DateTimeOffset recordedAtUtc)
+        DateTimeOffset recordedAtUtc,
+        double? batteryLevel,
+        TrackingSource source)
         : base(id)
     {
         TripId = tripId;
@@ -27,6 +29,8 @@ public sealed class TrackingEvent : AggregateRoot<Guid>
         Point = point;
         CapturedAtUtc = capturedAtUtc;
         RecordedAtUtc = recordedAtUtc;
+        BatteryLevel = batteryLevel;
+        Source = source;
     }
 
     private TrackingEvent()
@@ -45,6 +49,12 @@ public sealed class TrackingEvent : AggregateRoot<Guid>
     /// <summary>When the server ingested the event (may be much later than capture).</summary>
     public DateTimeOffset RecordedAtUtc { get; }
 
+    /// <summary>Device battery % at capture (optional) — feeds adaptive-interval / health tooling.</summary>
+    public double? BatteryLevel { get; }
+
+    /// <summary>Where this point originated (device GPS, manual, or system).</summary>
+    public TrackingSource Source { get; }
+
     /// <summary>
     /// Records a captured tracking event. <paramref name="recordedAtUtc"/> is the ingestion
     /// time (typically now); it must not precede the capture time.
@@ -54,12 +64,15 @@ public sealed class TrackingEvent : AggregateRoot<Guid>
         TrackingEventType type,
         LocationPoint point,
         DateTimeOffset capturedAtUtc,
-        DateTimeOffset recordedAtUtc)
+        DateTimeOffset recordedAtUtc,
+        double? batteryLevel = null,
+        TrackingSource source = TrackingSource.Device)
     {
         Guard.AgainstDefault(tripId, "Trip id", "tracking_trip_required");
         ArgumentNullException.ThrowIfNull(point);
         Guard.AgainstDefault(capturedAtUtc, "Captured-at", "tracking_captured_required");
         Guard.Against(recordedAtUtc < capturedAtUtc, "Recorded-at cannot precede captured-at.", "tracking_recorded_before_captured");
-        return new TrackingEvent(Guid.NewGuid(), tripId, type, point, capturedAtUtc, recordedAtUtc);
+        Guard.Against(batteryLevel is < 0 or > 100, "Battery level must be between 0 and 100.", "tracking_battery_out_of_range");
+        return new TrackingEvent(Guid.NewGuid(), tripId, type, point, capturedAtUtc, recordedAtUtc, batteryLevel, source);
     }
 }

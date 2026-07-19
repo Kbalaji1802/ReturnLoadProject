@@ -20,6 +20,8 @@ public sealed class TrackingEventConfiguration : AggregateConfiguration<Tracking
         builder.Property(e => e.Type).HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(e => e.CapturedAtUtc).IsRequired();
         builder.Property(e => e.RecordedAtUtc).IsRequired();
+        builder.Property(e => e.BatteryLevel);
+        builder.Property(e => e.Source).HasConversion<string>().HasMaxLength(16).IsRequired();
 
         builder.OwnsOne(e => e.Point, point =>
         {

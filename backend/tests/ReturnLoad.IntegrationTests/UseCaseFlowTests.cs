@@ -7,6 +7,7 @@ using ReturnLoad.Application;
 using ReturnLoad.Application.Abstractions.Geo;
 using ReturnLoad.Application.UseCases.Bookings;
 using ReturnLoad.Application.UseCases.Documents;
+using ReturnLoad.Application.UseCases.Tracking;
 using ReturnLoad.Application.UseCases.Loads;
 using ReturnLoad.Application.UseCases.Onboarding;
 using ReturnLoad.Application.UseCases.Trips;
@@ -193,6 +194,24 @@ public sealed class UseCaseFlowTests : IDisposable
         // The request is now Accepted.
         Domain.Bookings.BookingRequest request = await db.BookingRequests.AsNoTracking().FirstAsync(b => b.Id == requestId);
         Assert.Equal(Domain.Bookings.BookingRequestStatus.Accepted, request.Status);
+
+        // M6: drive the trip to an active state, the driver records a location, and the load
+        // owner can see it live — but an unrelated user cannot.
+        ITripService trips = _provider.GetRequiredService<ITripService>();
+        await trips.AdvanceAsync(accepted.Value, TripStatus.DriverAccepted);
+        await trips.AdvanceAsync(accepted.Value, TripStatus.DriverEnRoute);
+
+        ITrackingService tracking = _provider.GetRequiredService<ITrackingService>();
+        Result recorded = await tracking.RecordLocationAsync(
+            driverAuthId, accepted.Value, new RecordLocationRequest(9.95, 78.10, DateTimeOffset.UtcNow, SpeedKph: 40));
+        Assert.True(recorded.IsSuccess);
+
+        Result<TripLiveView> live = await tracking.GetLiveAsync(shipperAuthId, accepted.Value, privileged: false);
+        Assert.True(live.IsSuccess);
+        Assert.True(live.Value.HasLocation);
+
+        Result<TripLiveView> stranger = await tracking.GetLiveAsync(Guid.NewGuid(), accepted.Value, privileged: false);
+        Assert.True(stranger.IsFailure);
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using ReturnLoad.Api.Extensions;
 using ReturnLoad.Api.Http;
 using ReturnLoad.Application.Identity;
+using ReturnLoad.Application.UseCases.Tracking;
 using ReturnLoad.Application.UseCases.Trips;
 using ReturnLoad.Domain.Trips;
 
@@ -16,8 +17,16 @@ namespace ReturnLoad.Api.Controllers;
 public sealed class TripsController : ControllerBase
 {
     private readonly ITripService _trips;
+    private readonly ITrackingService _tracking;
 
-    public TripsController(ITripService trips) => _trips = trips;
+    public TripsController(ITripService trips, ITrackingService tracking)
+    {
+        _trips = trips;
+        _tracking = tracking;
+    }
+
+    /// <summary>True when the caller is internal staff (may read any trip's tracking).</summary>
+    private bool IsPrivileged => Roles.Internal.Any(User.IsInRole);
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateTripRequest request, CancellationToken cancellationToken)
@@ -63,17 +72,55 @@ public sealed class TripsController : ControllerBase
         return result.ToApiResult(HttpContext, $"Trip {target}.");
     }
 
-    [HttpPost("{id:guid}/tracking")]
-    public async Task<IActionResult> RecordTracking(Guid id, [FromBody] RecordTrackingRequest request, CancellationToken cancellationToken)
+    /// <summary>The assigned driver uploads a live location point for an active trip (M6).</summary>
+    [HttpPost("{id:guid}/location")]
+    public async Task<IActionResult> RecordLocation(Guid id, [FromBody] RecordLocationRequest request, CancellationToken cancellationToken)
     {
-        var result = await _trips.RecordTrackingAsync(id, request, cancellationToken);
-        return result.ToApiResult(HttpContext, "Tracking recorded.");
+        if (!HttpContext.TryGetUserId(out Guid authUserId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _tracking.RecordLocationAsync(authUserId, id, request, cancellationToken);
+        return result.ToApiResult(HttpContext, "Location recorded.");
     }
 
+    /// <summary>The trip's tracking breadcrumb (driver / load owner / staff).</summary>
     [HttpGet("{id:guid}/tracking")]
     public async Task<IActionResult> GetTracking(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _trips.GetTrackingAsync(id, cancellationToken);
+        if (!HttpContext.TryGetUserId(out Guid authUserId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _tracking.GetHistoryAsync(authUserId, id, IsPrivileged, cancellationToken);
+        return result.ToApiResult(HttpContext);
+    }
+
+    /// <summary>The live position + distance remaining + ETA (owner/admin "Where is my truck?").</summary>
+    [HttpGet("{id:guid}/tracking/live")]
+    public async Task<IActionResult> GetLive(Guid id, CancellationToken cancellationToken)
+    {
+        if (!HttpContext.TryGetUserId(out Guid authUserId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _tracking.GetLiveAsync(authUserId, id, IsPrivileged, cancellationToken);
+        return result.ToApiResult(HttpContext);
+    }
+
+    /// <summary>Trip analytics: distance, duration, average/max speed, idle time.</summary>
+    [HttpGet("{id:guid}/tracking/summary")]
+    public async Task<IActionResult> GetSummary(Guid id, CancellationToken cancellationToken)
+    {
+        if (!HttpContext.TryGetUserId(out Guid authUserId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _tracking.GetSummaryAsync(authUserId, id, IsPrivileged, cancellationToken);
         return result.ToApiResult(HttpContext);
     }
 }
