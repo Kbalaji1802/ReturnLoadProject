@@ -26,7 +26,8 @@ class _LoadsTabState extends ConsumerState<LoadsTab> {
   Future<void> _fetch() async {
     setState(() { _error = null; });
     try {
-      final res = await ref.read(dioProvider).get<dynamic>('loads/available');
+      // Matched loads only — the compatible set for this driver's fleet, not the whole board.
+      final res = await ref.read(dioProvider).get<dynamic>('loads/matched');
       if (mounted) setState(() => _loads = res.data['data'] as List);
     } catch (_) {
       if (mounted) setState(() { _error = 'Could not load. Pull to retry.'; _loads = []; });
@@ -36,7 +37,7 @@ class _LoadsTabState extends ConsumerState<LoadsTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Available loads')),
+      appBar: AppBar(title: const Text('Loads for you')),
       body: RefreshIndicator(
         onRefresh: _fetch,
         child: _loads == null

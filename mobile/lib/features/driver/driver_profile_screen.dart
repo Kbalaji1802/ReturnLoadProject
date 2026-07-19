@@ -55,7 +55,7 @@ class _State extends ConsumerState<DriverProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Register as driver'), leading: BackButton(onPressed: () => context.go('/dashboard'))),
+      appBar: AppBar(title: const Text('Register as driver'), leading: BackButton(onPressed: () => context.go('/home'))),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 460),

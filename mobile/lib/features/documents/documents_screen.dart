@@ -32,36 +32,26 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   final Map<int, String> _status = {};
   bool _busy = false;
 
-  Future<String?> _driverId() async {
-    try {
-      final res = await ref.read(dioProvider).get<dynamic>('drivers');
-      final list = res.data['data'] as List;
-      return list.isEmpty ? null : list.first['id'] as String;
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<void> _upload(int type, ImageSource source) async {
     final XFile? file = await ImagePicker().pickImage(source: source, imageQuality: 70);
     if (file == null) return;
     setState(() => _busy = true);
     try {
-      final id = await _driverId();
-      if (id == null) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Register your driver profile first.')));
-        return;
-      }
       final bytes = await file.readAsBytes();
+      // The server resolves the owning driver from the auth token; the client never sends an
+      // owner id, so a document can only attach to the signed-in driver (M4.2 security fix).
       final form = FormData.fromMap({
-        'ownerType': 0, // Driver
-        'ownerId': id,
         'type': type,
         'file': MultipartFile.fromBytes(bytes, filename: file.name),
       });
-      await ref.read(dioProvider).post<dynamic>('documents/upload', data: form);
+      await ref.read(dioProvider).post<dynamic>('documents/driver-upload', data: form);
       setState(() => _status[type] = 'Submitted');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Uploaded for review.')));
+    } on DioException catch (e) {
+      final message = e.response?.statusCode == 404
+          ? 'Register your driver profile first.'
+          : 'Upload failed.';
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Upload failed.')));
     } finally {

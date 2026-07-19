@@ -18,18 +18,36 @@ final authRepositoryProvider = Provider<AuthRepository>(
   (ref) => AuthRepository(ref),
 );
 
-/// The signed-in user's email, decoded from the JWT payload (null when signed out).
-final currentEmailProvider = Provider<String?>((ref) {
-  final token = ref.watch(authTokenProvider);
+/// The decoded JWT payload (null when signed out / malformed).
+Map<String, dynamic>? _decodeJwt(String? token) {
   if (token == null) return null;
   try {
     final parts = token.split('.');
-    final payload = jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
-    return (payload as Map<String, dynamic>)['email'] as String?;
+    return jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(parts[1])))) as Map<String, dynamic>;
   } catch (_) {
     return null;
   }
+}
+
+/// The signed-in user's email, decoded from the JWT payload (null when signed out).
+final currentEmailProvider = Provider<String?>((ref) {
+  final token = ref.watch(authTokenProvider);
+  return _decodeJwt(token)?['email'] as String?;
 });
+
+/// The signed-in user's roles, decoded from the JWT `role` claim (string or array).
+final currentRolesProvider = Provider<List<String>>((ref) {
+  final claim = _decodeJwt(ref.watch(authTokenProvider))?['role'];
+  if (claim == null) return const [];
+  return claim is List ? claim.map((r) => r.toString()).toList() : [claim.toString()];
+});
+
+/// Whether the signed-in user is a Load Owner (the `Shipper` role). Drives which app the
+/// shell shows — a Driver never sees the Post-Load / shipper surfaces (M4.2).
+final isLoadOwnerProvider = Provider<bool>((ref) => ref.watch(currentRolesProvider).contains('Shipper'));
+
+/// The two marketplace sides a person can register as (mirrors the API's AccountType enum).
+enum AccountType { driver, loadOwner }
 
 /// Authenticates the driver against the ReturnLoad API and persists the token
 /// encrypted-at-rest on the device (OFFLINE_STRATEGY.md §3, 01_PROJECT_RULES.md §5).
@@ -43,9 +61,17 @@ class AuthRepository {
       _authenticate('auth/login', {'email': email, 'password': password, 'deviceId': 'driver-mobile'});
 
   /// Self-service registration; the API returns tokens, so the user is signed in immediately.
-  Future<void> register(String email, String password, String? phone) => _authenticate(
+  /// [accountType] chooses the marketplace side and the role granted at sign-up (M4.2).
+  Future<void> register(String email, String password, String? phone, AccountType accountType) => _authenticate(
         'auth/register',
-        {'email': email, 'password': password, 'phoneNumber': phone, 'deviceId': 'driver-mobile'},
+        {
+          'email': email,
+          'password': password,
+          'phoneNumber': phone,
+          'deviceId': 'driver-mobile',
+          // The API's AccountType enum is serialised as an integer: Driver=0, LoadOwner=1.
+          'accountType': accountType == AccountType.loadOwner ? 1 : 0,
+        },
       );
 
   Future<void> _authenticate(String path, Map<String, dynamic> body) async {

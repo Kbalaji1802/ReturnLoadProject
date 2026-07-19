@@ -25,7 +25,7 @@ class _HomeTabState extends ConsumerState<HomeTab> {
 
   Future<void> _fetch() async {
     try {
-      final res = await ref.read(dioProvider).get<dynamic>('loads/available');
+      final res = await ref.read(dioProvider).get<dynamic>('loads/matched');
       final list = (res.data['data'] as List).length;
       if (mounted) setState(() => _availableLoads = list);
     } catch (_) {
@@ -79,10 +79,11 @@ class _HomeTabState extends ConsumerState<HomeTab> {
               ),
               const SizedBox(height: 8),
               Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(tr(ref, 'quick_actions'), style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700))),
+              // Driver actions only — a driver never posts loads (that is a Load Owner action).
               Wrap(spacing: 12, runSpacing: 12, children: [
-                _action(context, Icons.post_add, 'Post load', () => context.push('/post-load')),
                 _action(context, Icons.description, 'Documents', () => context.push('/documents')),
                 _action(context, Icons.local_shipping, 'Vehicle', () => context.push('/vehicle')),
+                _action(context, Icons.badge, 'My profile', () => context.push('/driver-profile')),
                 _action(context, Icons.map, 'Map', () => context.push('/map')),
               ]),
             ],

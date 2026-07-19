@@ -5,9 +5,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../services/auth_repository.dart';
 
-/// Self-service account creation. Calls /auth/register (which returns tokens), so the
-/// new user is signed straight in. Business roles (Driver/Shipper) are granted during
-/// onboarding/verification, not at sign-up.
+/// Self-service account creation. The user first chooses an account type (Driver or Load
+/// Owner); that grants the matching role at sign-up (M4.2). Calls /auth/register (which returns
+/// tokens), so the new user is signed straight in.
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
@@ -22,6 +22,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _phone = TextEditingController();
+  AccountType _accountType = AccountType.driver;
   bool _busy = false;
   String? _error;
 
@@ -40,6 +41,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             _email.text.trim(),
             _password.text,
             _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+            _accountType,
           );
       if (mounted) context.go('/home');
     } on DioException catch (e) {
@@ -68,6 +70,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 8),
+                  child: Text('I am a…', style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+                SegmentedButton<AccountType>(
+                  segments: const [
+                    ButtonSegment(value: AccountType.driver, icon: Icon(Icons.local_shipping), label: Text('Driver')),
+                    ButtonSegment(value: AccountType.loadOwner, icon: Icon(Icons.inventory_2), label: Text('Load Owner')),
+                  ],
+                  selected: {_accountType},
+                  onSelectionChanged: _busy ? null : (s) => setState(() => _accountType = s.first),
+                ),
+                const SizedBox(height: 16),
                 TextField(controller: _email, decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder())),
                 const SizedBox(height: 12),
                 TextField(controller: _password, obscureText: true, decoration: const InputDecoration(labelText: 'Password (min 12 chars, mixed case, digit, symbol)', border: OutlineInputBorder())),
