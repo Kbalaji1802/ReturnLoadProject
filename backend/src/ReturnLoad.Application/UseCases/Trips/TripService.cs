@@ -17,7 +17,8 @@ public sealed record CreateTripRequest(
 
 public sealed record TripView(
     Guid Id, Guid CarrierId, Guid VehicleId, Guid DriverProfileId, TripStatus Status,
-    DateTimeOffset? StartedAtUtc, DateTimeOffset? CompletedAtUtc);
+    DateTimeOffset? StartedAtUtc, DateTimeOffset? CompletedAtUtc,
+    double OriginLat, double OriginLng, double DestinationLat, double DestinationLng);
 
 public interface ITripService
 {
@@ -132,7 +133,9 @@ internal sealed class TripService : ITripService
     }
 
     private static TripView MapView(Trip trip) =>
-        new(trip.Id, trip.CarrierId, trip.VehicleId, trip.DriverProfileId, trip.Status, trip.StartedAtUtc, trip.CompletedAtUtc);
+        new(trip.Id, trip.CarrierId, trip.VehicleId, trip.DriverProfileId, trip.Status, trip.StartedAtUtc, trip.CompletedAtUtc,
+            trip.Origin.Coordinate.Latitude, trip.Origin.Coordinate.Longitude,
+            trip.Destination.Coordinate.Latitude, trip.Destination.Coordinate.Longitude);
 
     /// <summary>
     /// Advances the trip one legal step toward <paramref name="target"/> (or cancels it). An

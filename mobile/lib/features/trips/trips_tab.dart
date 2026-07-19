@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/enums.dart';
 import '../../services/dio_client.dart';
@@ -172,7 +173,7 @@ class _TripsTabState extends ConsumerState<TripsTab> {
               onChanged: (v) => _toggleShare(tripId, v),
             ),
             // Return Availability (Tamil Nadu differentiator): ask near the destination.
-            if (status >= 5 && status < 8) _returnAvailability(),
+            if (status >= 5 && status < 8) _returnAvailability(t),
             const SizedBox(height: 8),
             if (next != null)
               FilledButton(
@@ -193,7 +194,7 @@ class _TripsTabState extends ConsumerState<TripsTab> {
   /// Return Availability — nudge the driver to line up a return load before unloading, the core
   /// deadhead-reduction differentiator. (Records intent locally for now; a return-load search
   /// hooks in with the return-leg feature.)
-  Widget _returnAvailability() => Container(
+  Widget _returnAvailability(Map<String, dynamic> t) => Container(
         margin: const EdgeInsets.only(top: 4),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -204,12 +205,22 @@ class _TripsTabState extends ConsumerState<TripsTab> {
           const Text('Approaching destination — will you return empty?', style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           Wrap(spacing: 8, children: [
-            OutlinedButton(onPressed: () => _return('Yes — find me a return load'), child: const Text('Yes')),
+            OutlinedButton(onPressed: () => _findReturnLoads(t), child: const Text('Yes')),
             OutlinedButton(onPressed: () => _return('Okay, no return load needed'), child: const Text('No')),
             OutlinedButton(onPressed: () => _return('We\'ll check back with you'), child: const Text('Not sure')),
           ]),
         ]),
       );
+
+  void _findReturnLoads(Map<String, dynamic> t) {
+    final lat = (t['destinationLat'] as num?)?.toDouble();
+    final lng = (t['destinationLng'] as num?)?.toDouble();
+    if (lat == null || lng == null) {
+      _return('We\'ll look for return loads near your destination.');
+      return;
+    }
+    context.push('/return-loads', extra: {'lat': lat, 'lng': lng, 'place': t['destinationAddress']});
+  }
 
   void _return(String message) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));

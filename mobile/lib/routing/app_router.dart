@@ -9,6 +9,7 @@ import '../features/loads/load_details_screen.dart';
 import '../features/loads/load_requests_screen.dart';
 import '../features/loads/my_loads_screen.dart';
 import '../features/loads/post_load_screen.dart';
+import '../features/loads/return_loads_screen.dart';
 import '../features/map/map_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/shell/home_shell.dart';
@@ -46,6 +47,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: PostLoadScreen.routePath, name: PostLoadScreen.routeName, builder: (c, s) => const PostLoadScreen()),
       GoRoute(path: MyLoadsScreen.routePath, name: MyLoadsScreen.routeName, builder: (c, s) => const MyLoadsScreen()),
+      GoRoute(
+        path: ReturnLoadsScreen.routePath,
+        name: ReturnLoadsScreen.routeName,
+        builder: (c, s) {
+          final e = (s.extra as Map<String, dynamic>?) ?? const {};
+          return ReturnLoadsScreen(
+            lat: (e['lat'] as num?)?.toDouble() ?? 0,
+            lng: (e['lng'] as num?)?.toDouble() ?? 0,
+            place: e['place'] as String?,
+          );
+        },
+      ),
       GoRoute(
         path: LoadRequestsScreen.routePath,
         name: LoadRequestsScreen.routeName,
