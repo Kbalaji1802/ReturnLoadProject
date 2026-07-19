@@ -29,9 +29,6 @@ public interface ILoadService
     Task<Result<IReadOnlyList<LoadView>>> ListMineAsync(Guid authUserId, CancellationToken cancellationToken = default);
 
     Task<Result<LoadView>> GetAsync(Guid loadId, CancellationToken cancellationToken = default);
-
-    /// <summary>Accept an available load (proposes + commits it for MVP).</summary>
-    Task<Result> AcceptAsync(Guid loadId, CancellationToken cancellationToken = default);
 }
 
 internal sealed class LoadService : ILoadService
@@ -102,21 +99,6 @@ internal sealed class LoadService : ILoadService
     {
         Load? load = await _loads.GetByIdAsync(loadId, cancellationToken);
         return load is null ? Error.NotFound("Load not found.") : Map(load);
-    }
-
-    public async Task<Result> AcceptAsync(Guid loadId, CancellationToken cancellationToken = default)
-    {
-        Load? load = await _loads.GetByIdAsync(loadId, cancellationToken);
-        if (load is null)
-        {
-            return Result.Failure(Error.NotFound("Load not found."));
-        }
-
-        load.MarkMatched();
-        load.Book();
-        _loads.Update(load);
-        await _uow.SaveChangesAsync(cancellationToken);
-        return Result.Success();
     }
 
     private static LoadView Map(Load l) => new(

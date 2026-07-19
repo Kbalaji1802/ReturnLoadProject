@@ -119,7 +119,6 @@ public sealed class UseCaseFlowTests : IDisposable
         // The platform computed and stored the route metrics (M4.3 Step 1) — not the shipper.
         Assert.Equal(497.50m, posted.DistanceKm);
         Assert.Equal(540, posted.EstimatedDurationMinutes);
-        Assert.True((await loads.AcceptAsync(loadId)).IsSuccess);
 
         // 7) Create a trip and drive it to completion.
         ITripService trips = _provider.GetRequiredService<ITripService>();

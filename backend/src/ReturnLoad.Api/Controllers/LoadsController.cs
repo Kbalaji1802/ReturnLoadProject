@@ -84,11 +84,4 @@ public sealed class LoadsController : ControllerBase
         return result.ToApiResult(HttpContext);
     }
 
-    /// <summary>Accept an available load (matches + books it).</summary>
-    [HttpPost("{id:guid}/accept")]
-    public async Task<IActionResult> Accept(Guid id, CancellationToken cancellationToken)
-    {
-        var result = await _loads.AcceptAsync(id, cancellationToken);
-        return result.ToApiResult(HttpContext, "Load accepted.");
-    }
 }
