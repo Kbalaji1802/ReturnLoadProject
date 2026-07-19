@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -29,7 +30,7 @@ interface TripView {
 @Component({
   selector: 'app-trips',
   imports: [
-    DatePipe, FormsModule, MatTableModule, MatPaginatorModule, MatFormFieldModule, MatInputModule,
+    DatePipe, RouterLink, FormsModule, MatTableModule, MatPaginatorModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatButtonModule, MatIconModule, MatProgressBarModule, PageHeader, StatusChip, EmptyState,
   ],
   template: `
@@ -79,6 +80,12 @@ interface TripView {
               <th mat-header-cell *matHeaderCellDef>Started</th>
               <td mat-cell *matCellDef="let t">{{ t.startedAtUtc ? (t.startedAtUtc | date: 'short') : '—' }}</td>
             </ng-container>
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef></th>
+              <td mat-cell *matCellDef="let t" class="right">
+                <a mat-stroked-button [routerLink]="['/tracking', t.id]"><mat-icon>my_location</mat-icon> Track</a>
+              </td>
+            </ng-container>
             <tr mat-header-row *matHeaderRowDef="cols"></tr>
             <tr mat-row *matRowDef="let row; columns: cols"></tr>
           </table>
@@ -88,11 +95,11 @@ interface TripView {
       </div>
     </div>
   `,
-  styles: [`.search { min-width: 300px; } .mono { font-family: ui-monospace, monospace; font-size: 0.8rem; color: var(--mat-sys-on-surface-variant); }`],
+  styles: [`.search { min-width: 300px; } .mono { font-family: ui-monospace, monospace; font-size: 0.8rem; color: var(--mat-sys-on-surface-variant); } .right { text-align: right; white-space: nowrap; }`],
 })
 export class Trips {
   private readonly api = inject(ApiService);
-  protected readonly cols = ['id', 'status', 'driver', 'vehicle', 'started'];
+  protected readonly cols = ['id', 'status', 'driver', 'vehicle', 'started', 'actions'];
   protected readonly statuses = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
   protected readonly busy = signal(true);

@@ -26,6 +26,7 @@ export const routes: Routes = [
       { path: 'loads', title: 'Loads · ReturnLoad Admin', loadComponent: () => import('./features/loads/loads').then((m) => m.Loads) },
       { path: 'bookings', title: 'Booking requests · ReturnLoad Admin', loadComponent: () => import('./features/bookings/bookings').then((m) => m.Bookings) },
       { path: 'trips', title: 'Trips · ReturnLoad Admin', loadComponent: () => import('./features/trips/trips').then((m) => m.Trips) },
+      { path: 'tracking/:id', title: 'Live tracking · ReturnLoad Admin', loadComponent: () => import('./features/tracking/trip-tracking').then((m) => m.TripTracking) },
       { path: 'settings', title: 'Settings · ReturnLoad Admin', loadComponent: () => import('./features/settings/settings').then((m) => m.Settings) },
     ],
   },
