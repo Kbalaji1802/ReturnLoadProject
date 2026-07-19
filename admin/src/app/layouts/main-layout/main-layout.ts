@@ -49,8 +49,8 @@ interface NavItem {
       </button>
       <mat-menu #userMenu="matMenu">
         <div class="menu-head">
-          <div class="menu-name">Operations</div>
-          <div class="menu-mail">admin&#64;returnload.test</div>
+          <div class="menu-name">{{ auth.displayRole() }}</div>
+          <div class="menu-mail">{{ auth.email() ?? 'Signed in' }}</div>
         </div>
         <mat-divider />
         <button mat-menu-item routerLink="/settings"><mat-icon>settings</mat-icon> Settings</button>
@@ -105,7 +105,7 @@ interface NavItem {
   ],
 })
 export class MainLayout {
-  private readonly auth = inject(AuthService);
+  protected readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   protected readonly theme = inject(ThemeService);
 

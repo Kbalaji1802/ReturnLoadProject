@@ -115,8 +115,14 @@ export class Documents {
   }
 
   protected reject(id: string): void {
+    // A rejection must carry a real, auditable reason (Trust & Safety §5) — never a canned string.
+    const reason = window.prompt('Reason for rejecting this document (shown in the audit trail):')?.trim();
+    if (!reason) {
+      return; // cancelled or empty — do not reject without a reason
+    }
+
     this.busy.set(true);
-    this.api.post(`documents/${id}/reject`, { reason: 'Rejected from console' }).subscribe({
+    this.api.post(`documents/${id}/reject`, { reason }).subscribe({
       next: () => { this.snack.open('Document rejected.', 'OK', { duration: 2500 }); this.load(); },
       error: () => { this.snack.open('Rejection failed.', 'OK', { duration: 3000 }); this.busy.set(false); },
     });

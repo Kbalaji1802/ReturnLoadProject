@@ -18,12 +18,24 @@ export class ApiService {
   get<T>(path: string): Observable<T> {
     return this.http
       .get<ApiEnvelope<T>>(`${this.baseUrl}/${path}`)
-      .pipe(map((r) => r.data));
+      .pipe(map((r) => unwrap(r)));
   }
 
   post<T>(path: string, body: unknown): Observable<T> {
     return this.http
       .post<ApiEnvelope<T>>(`${this.baseUrl}/${path}`, body)
-      .pipe(map((r) => r.data));
+      .pipe(map((r) => unwrap(r)));
   }
+}
+
+/**
+ * Unwraps the standard envelope. A `success: false` body (which can arrive with a 200) is a
+ * failure, not data — surface it as an error so callers don't silently render an empty payload.
+ */
+function unwrap<T>(envelope: ApiEnvelope<T>): T {
+  if (envelope && envelope.success === false) {
+    const first = envelope.errors?.[0]?.message;
+    throw new Error(first ?? envelope.message ?? 'Request failed.');
+  }
+  return envelope.data;
 }
