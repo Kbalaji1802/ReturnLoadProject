@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ReturnLoad.Api.Extensions;
 using ReturnLoad.Api.Http;
+using ReturnLoad.Application.Identity;
 using ReturnLoad.Application.UseCases.Trips;
 using ReturnLoad.Domain.Trips;
 
@@ -23,6 +24,15 @@ public sealed class TripsController : ControllerBase
     {
         var result = await _trips.CreateAsync(request, cancellationToken);
         return result.ToApiResult(HttpContext, "Trip created.");
+    }
+
+    /// <summary>All trips (ops/admin console).</summary>
+    [HttpGet]
+    [Authorize(Policy = AuthorizationPolicies.InternalStaff)]
+    public async Task<IActionResult> All(CancellationToken cancellationToken)
+    {
+        var result = await _trips.ListAllAsync(cancellationToken);
+        return result.ToApiResult(HttpContext);
     }
 
     /// <summary>The authenticated driver's trips — current + history (My Trips).</summary>

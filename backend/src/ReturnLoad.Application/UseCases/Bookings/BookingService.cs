@@ -29,6 +29,9 @@ public interface IBookingService
     /// <summary>The requests on a load the caller owns.</summary>
     Task<Result<IReadOnlyList<BookingRequestView>>> ListForLoadAsync(Guid authUserId, Guid loadId, CancellationToken cancellationToken = default);
 
+    /// <summary>All booking requests (ops/admin console).</summary>
+    Task<Result<IReadOnlyList<BookingRequestView>>> ListAllAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Load owner accepts a request → creates the Trip, assigns the load. Returns the trip id.</summary>
     Task<Result<Guid>> AcceptAsync(Guid authUserId, Guid requestId, CancellationToken cancellationToken = default);
 
@@ -266,6 +269,12 @@ internal sealed class BookingService : IBookingService
         }
 
         IReadOnlyList<BookingRequest> list = await _bookings.ListAsync(b => b.LoadId == loadId, cancellationToken);
+        return Result<IReadOnlyList<BookingRequestView>>.Success(list.Select(Map).ToList());
+    }
+
+    public async Task<Result<IReadOnlyList<BookingRequestView>>> ListAllAsync(CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<BookingRequest> list = await _bookings.ListAsync(_ => true, cancellationToken);
         return Result<IReadOnlyList<BookingRequestView>>.Success(list.Select(Map).ToList());
     }
 

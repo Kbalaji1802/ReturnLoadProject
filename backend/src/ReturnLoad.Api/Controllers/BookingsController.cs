@@ -62,6 +62,15 @@ public sealed class BookingsController : ControllerBase
         return result.ToApiResult(HttpContext);
     }
 
+    /// <summary>All booking requests (ops/admin console).</summary>
+    [HttpGet]
+    [Authorize(Policy = AuthorizationPolicies.InternalStaff)]
+    public async Task<IActionResult> All(CancellationToken cancellationToken)
+    {
+        var result = await _bookings.ListAllAsync(cancellationToken);
+        return result.ToApiResult(HttpContext);
+    }
+
     /// <summary>Load owner accepts a request — creates the trip and assigns the load.</summary>
     [HttpPost("requests/{id:guid}/accept")]
     [Authorize(Policy = AuthorizationPolicies.CanPostLoads)]

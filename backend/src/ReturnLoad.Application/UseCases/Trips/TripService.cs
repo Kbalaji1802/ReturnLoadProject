@@ -33,6 +33,9 @@ public interface ITripService
     /// <summary>The authenticated driver's trips — current + history (My Trips, M4.3 Step 7).</summary>
     Task<Result<IReadOnlyList<TripView>>> ListMineAsync(Guid authUserId, CancellationToken cancellationToken = default);
 
+    /// <summary>All trips (ops/admin console).</summary>
+    Task<Result<IReadOnlyList<TripView>>> ListAllAsync(CancellationToken cancellationToken = default);
+
     Task<Result> AdvanceAsync(Guid tripId, TripStatus target, CancellationToken cancellationToken = default);
 
     Task<Result> RecordTrackingAsync(Guid tripId, RecordTrackingRequest request, CancellationToken cancellationToken = default);
@@ -101,6 +104,12 @@ internal sealed class TripService : ITripService
         }
 
         IReadOnlyList<Trip> trips = await _trips.ListAsync(t => t.DriverProfileId == driver.Id, cancellationToken);
+        return Result<IReadOnlyList<TripView>>.Success(trips.Select(MapView).ToList());
+    }
+
+    public async Task<Result<IReadOnlyList<TripView>>> ListAllAsync(CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Trip> trips = await _trips.ListAsync(_ => true, cancellationToken);
         return Result<IReadOnlyList<TripView>>.Success(trips.Select(MapView).ToList());
     }
 
