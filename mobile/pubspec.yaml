@@ -25,6 +25,9 @@ dependencies:
   flutter_map: ^7.0.2
   latlong2: ^0.9.1
 
+  # Device GPS for live trip tracking + proximity-based matching (M6).
+  geolocator: ^13.0.1
+
   # Encrypted-at-rest local storage for tokens/sensitive cache
   # (OFFLINE_STRATEGY.md §3, 01_PROJECT_RULES.md §5).
   flutter_secure_storage: ^9.2.2

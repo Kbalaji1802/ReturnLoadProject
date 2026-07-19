@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/enums.dart';
 import '../../services/dio_client.dart';
+import '../../services/location_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/skeleton.dart';
 
@@ -25,7 +26,21 @@ class _LoadsTabState extends ConsumerState<LoadsTab> {
   @override
   void initState() {
     super.initState();
-    _fetch();
+    _init();
+  }
+
+  /// Best-effort: use the device's current location so proximity ranks automatically (M6).
+  /// The driver can still override it via the location bar.
+  Future<void> _init() async {
+    try {
+      final loc = await ref.read(locationServiceProvider).current();
+      if (loc != null && mounted) {
+        _lat = loc.latitude;
+        _lng = loc.longitude;
+        _locationLabel = 'Current location';
+      }
+    } catch (_) {/* fall back to no location / manual */}
+    await _fetch();
   }
 
   Future<void> _fetch() async {

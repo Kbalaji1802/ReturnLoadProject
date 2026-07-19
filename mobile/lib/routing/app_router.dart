@@ -12,6 +12,7 @@ import '../features/loads/post_load_screen.dart';
 import '../features/map/map_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/shell/home_shell.dart';
+import '../features/tracking/owner_trip_tracking_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/vehicle/vehicle_screen.dart';
 import '../services/auth_repository.dart';
@@ -49,6 +50,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: LoadRequestsScreen.routePath,
         name: LoadRequestsScreen.routeName,
         builder: (c, s) => LoadRequestsScreen(load: (s.extra as Map<String, dynamic>?) ?? const {}),
+      ),
+      GoRoute(
+        path: OwnerTripTrackingScreen.routePath,
+        name: OwnerTripTrackingScreen.routeName,
+        builder: (c, s) => OwnerTripTrackingScreen(load: (s.extra as Map<String, dynamic>?) ?? const {}),
       ),
       GoRoute(path: DriverProfileScreen.routePath, name: DriverProfileScreen.routeName, builder: (c, s) => const DriverProfileScreen()),
       GoRoute(path: VehicleScreen.routePath, name: VehicleScreen.routeName, builder: (c, s) => const VehicleScreen()),

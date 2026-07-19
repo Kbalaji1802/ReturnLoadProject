@@ -62,11 +62,17 @@ class _MyLoadsScreenState extends ConsumerState<MyLoadsScreen> {
 
   Widget _card(Map<String, dynamic> load) {
     final text = Theme.of(context).textTheme;
-    final isOpen = load['status'] == 1; // Posted/Open
+    final status = load['status'] as int?;
+    final isOpen = status == 1; // Posted/Open
+    final isAssigned = status == 3 || status == 4; // Assigned / In transit
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(AppTheme.radius),
-        onTap: isOpen ? () => context.push('/load-requests', extra: load) : null,
+        onTap: isOpen
+            ? () => context.push('/load-requests', extra: load)
+            : isAssigned
+                ? () => context.push('/track', extra: load)
+                : null,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -90,6 +96,15 @@ class _MyLoadsScreenState extends ConsumerState<MyLoadsScreen> {
                   const Icon(Icons.people_outline, size: 18, color: AppColors.primary),
                   const SizedBox(width: 6),
                   Text('View driver requests', style: text.bodyMedium?.copyWith(color: AppColors.primary, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  const Icon(Icons.chevron_right, color: AppColors.primary),
+                ]),
+              ] else if (isAssigned) ...[
+                const SizedBox(height: 12),
+                Row(children: [
+                  const Icon(Icons.my_location, size: 18, color: AppColors.primary),
+                  const SizedBox(width: 6),
+                  Text('Track live', style: text.bodyMedium?.copyWith(color: AppColors.primary, fontWeight: FontWeight.w600)),
                   const Spacer(),
                   const Icon(Icons.chevron_right, color: AppColors.primary),
                 ]),

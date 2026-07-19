@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/enums.dart';
 import '../../services/dio_client.dart';
+import '../../services/location_service.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/skeleton.dart';
 import '../../shared/widgets/status_pill.dart';
@@ -20,10 +23,57 @@ class _TripsTabState extends ConsumerState<TripsTab> {
   String? _error;
   bool _busy = false;
 
+  // Live location sharing (M6). Foreground periodic updates; adaptive interval + a background
+  // service + offline queue are the documented productionization steps.
+  bool _sharing = false;
+  Timer? _shareTimer;
+  DateTime? _lastSentAt;
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _shareTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _toggleShare(String tripId, bool on) async {
+    if (!on) {
+      _shareTimer?.cancel();
+      setState(() => _sharing = false);
+      return;
+    }
+
+    final ok = await ref.read(locationServiceProvider).ensurePermission();
+    if (!ok) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location permission is required to share your trip.')));
+      return;
+    }
+    setState(() => _sharing = true);
+    await _sendLocation(tripId);
+    _shareTimer = Timer.periodic(const Duration(seconds: 30), (_) => _sendLocation(tripId));
+  }
+
+  Future<void> _sendLocation(String tripId) async {
+    final loc = await ref.read(locationServiceProvider).current();
+    if (loc == null) return;
+    try {
+      await ref.read(dioProvider).post<dynamic>('trips/$tripId/location', data: {
+        'latitude': loc.latitude,
+        'longitude': loc.longitude,
+        'capturedAtUtc': DateTime.now().toUtc().toIso8601String(),
+        'speedKph': loc.speedKph,
+        'headingDegrees': loc.headingDegrees,
+        'accuracyMetres': loc.accuracyMetres,
+      });
+      if (mounted) setState(() => _lastSentAt = DateTime.now());
+    } catch (_) {
+      // Offline: skip this tick. A local queue that flushes in order is the next step.
+    }
   }
 
   Future<void> _load() async {
@@ -108,7 +158,21 @@ class _TripsTabState extends ConsumerState<TripsTab> {
             ]),
             const SizedBox(height: 16),
             _timeline(status),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            // Live location sharing while on the road.
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: const Icon(Icons.my_location, color: AppColors.primary),
+              title: const Text('Share live location'),
+              subtitle: Text(_sharing
+                  ? (_lastSentAt != null ? 'Sharing with the load owner' : 'Starting…')
+                  : 'Let the load owner see your progress'),
+              value: _sharing,
+              onChanged: (v) => _toggleShare(tripId, v),
+            ),
+            // Return Availability (Tamil Nadu differentiator): ask near the destination.
+            if (status >= 5 && status < 8) _returnAvailability(),
+            const SizedBox(height: 8),
             if (next != null)
               FilledButton(
                 onPressed: _busy ? null : () => _advance(tripId, next),
@@ -124,6 +188,30 @@ class _TripsTabState extends ConsumerState<TripsTab> {
       ),
     );
   }
+
+  /// Return Availability — nudge the driver to line up a return load before unloading, the core
+  /// deadhead-reduction differentiator. (Records intent locally for now; a return-load search
+  /// hooks in with the return-leg feature.)
+  Widget _returnAvailability() => Container(
+        margin: const EdgeInsets.only(top: 4),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Approaching destination — will you return empty?', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, children: [
+            OutlinedButton(onPressed: () => _return('Yes — find me a return load'), child: const Text('Yes')),
+            OutlinedButton(onPressed: () => _return('Okay, no return load needed'), child: const Text('No')),
+            OutlinedButton(onPressed: () => _return('We\'ll check back with you'), child: const Text('Not sure')),
+          ]),
+        ]),
+      );
+
+  void _return(String message) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 
   /// Vertical lifecycle timeline; steps up to and including the current status are done.
   Widget _timeline(int status) {
