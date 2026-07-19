@@ -51,11 +51,9 @@ class LoadOwnerHomeTab extends ConsumerWidget {
               child: ListTile(
                 leading: const Icon(Icons.inventory_2_outlined, color: AppColors.primary),
                 title: const Text('My loads'),
-                subtitle: const Text('Track loads you have posted'),
+                subtitle: const Text('Track loads and choose drivers'),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Your posted-loads list is coming soon.')),
-                ),
+                onTap: () => context.push('/my-loads'),
               ),
             ),
           ],

@@ -10,7 +10,8 @@ namespace ReturnLoad.Application.UseCases.Bookings;
 
 public sealed record BookingRequestView(
     Guid Id, Guid LoadId, Guid DriverProfileId, Guid VehicleId,
-    BookingRequestStatus Status, DateTimeOffset CreatedAtUtc, DateTimeOffset? DecidedAtUtc);
+    BookingRequestStatus Status, DateTimeOffset CreatedAtUtc, DateTimeOffset? DecidedAtUtc,
+    string? DriverName, string? VehicleRegistration);
 
 /// <summary>
 /// The booking-request workflow (M4.3 Steps 3–4): a verified driver requests a load with one of
@@ -269,7 +270,19 @@ internal sealed class BookingService : IBookingService
         }
 
         IReadOnlyList<BookingRequest> list = await _bookings.ListAsync(b => b.LoadId == loadId, cancellationToken);
-        return Result<IReadOnlyList<BookingRequestView>>.Success(list.Select(Map).ToList());
+
+        // Enrich so the owner can choose: driver name + vehicle registration (N+1 is fine at the
+        // handful-of-requests-per-load scale). Rating / completed-trip counts arrive with Reviews.
+        List<BookingRequestView> views = [];
+        foreach (BookingRequest b in list)
+        {
+            DriverProfile? driver = await _drivers.GetByIdAsync(b.DriverProfileId, cancellationToken);
+            string? driverName = driver is null ? null : (await _users.GetByIdAsync(driver.UserProfileId, cancellationToken))?.FullName;
+            Vehicle? vehicle = await _vehicles.GetByIdAsync(b.VehicleId, cancellationToken);
+            views.Add(Map(b) with { DriverName = driverName, VehicleRegistration = vehicle?.Registration.Value });
+        }
+
+        return Result<IReadOnlyList<BookingRequestView>>.Success(views);
     }
 
     public async Task<Result<IReadOnlyList<BookingRequestView>>> ListAllAsync(CancellationToken cancellationToken = default)
@@ -279,5 +292,5 @@ internal sealed class BookingService : IBookingService
     }
 
     private static BookingRequestView Map(BookingRequest b) =>
-        new(b.Id, b.LoadId, b.DriverProfileId, b.VehicleId, b.Status, b.CreatedAtUtc, b.DecidedAtUtc);
+        new(b.Id, b.LoadId, b.DriverProfileId, b.VehicleId, b.Status, b.CreatedAtUtc, b.DecidedAtUtc, null, null);
 }
