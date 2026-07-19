@@ -204,10 +204,12 @@ class _TripsTabState extends ConsumerState<TripsTab> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('Approaching destination — will you return empty?', style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
-          Wrap(spacing: 8, children: [
-            OutlinedButton(onPressed: () => _findReturnLoads(t), child: const Text('Yes')),
-            OutlinedButton(onPressed: () => _return('Okay, no return load needed'), child: const Text('No')),
-            OutlinedButton(onPressed: () => _return('We\'ll check back with you'), child: const Text('Not sure')),
+          Row(children: [
+            Expanded(child: OutlinedButton(onPressed: () => _findReturnLoads(t), child: const Text('Yes'))),
+            const SizedBox(width: 8),
+            Expanded(child: OutlinedButton(onPressed: () => _return('Okay, no return load needed'), child: const Text('No'))),
+            const SizedBox(width: 8),
+            Expanded(child: OutlinedButton(onPressed: () => _return('Not sure'), child: const Text('Not sure'))),
           ]),
         ]),
       );

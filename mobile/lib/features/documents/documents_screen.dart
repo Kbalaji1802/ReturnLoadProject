@@ -86,16 +86,20 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
             return Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Row(children: [
-                  Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.description, color: AppColors.primary)),
-                  const SizedBox(width: 14),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 6),
-                    StatusPill(status),
-                  ])),
-                  FilledButton.tonalIcon(onPressed: _busy ? null : () => _pick(type), icon: const Icon(Icons.upload), label: const Text('Upload')),
-                ]),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.description, color: AppColors.primary)),
+                      const SizedBox(width: 14),
+                      Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16))),
+                      const SizedBox(width: 8),
+                      StatusPill(status),
+                    ]),
+                    const SizedBox(height: 14),
+                    FilledButton.tonalIcon(onPressed: _busy ? null : () => _pick(type), icon: const Icon(Icons.upload), label: const Text('Upload')),
+                  ],
+                ),
               ),
             );
           },
