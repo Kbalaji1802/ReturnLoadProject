@@ -48,7 +48,7 @@ class _LoadsTabState extends ConsumerState<LoadsTab> {
                     padding: const EdgeInsets.all(16),
                     itemCount: _loads!.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 14),
-                    itemBuilder: (context, i) => _LoadCard(load: _loads![i] as Map<String, dynamic>, onAccepted: _fetch),
+                    itemBuilder: (context, i) => _LoadCard(load: _loads![i] as Map<String, dynamic>),
                   ),
       ),
     );
@@ -65,9 +65,8 @@ class _LoadsTabState extends ConsumerState<LoadsTab> {
 }
 
 class _LoadCard extends ConsumerWidget {
-  const _LoadCard({required this.load, required this.onAccepted});
+  const _LoadCard({required this.load});
   final Map<String, dynamic> load;
-  final Future<void> Function() onAccepted;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -98,16 +97,15 @@ class _LoadCard extends ConsumerWidget {
                 _chip(Icons.scale, '${load['weightKg']} kg'),
                 if (load['offeredPriceInr'] != null) _chip(Icons.payments, '₹${load['offeredPriceInr']}'),
               ]),
+              if (load['distanceKm'] != null) ...[
+                const SizedBox(height: 6),
+                Text('${load['distanceKm']} km', style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              ],
               const SizedBox(height: 14),
-              Row(children: [
-                Expanded(child: FilledButton(onPressed: () => _accept(context, ref), child: const Text('Accept'))),
-                const SizedBox(width: 10),
-                OutlinedButton(
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Shipper contact is shared after booking.'))),
-                  style: OutlinedButton.styleFrom(minimumSize: const Size(54, 54)),
-                  child: const Icon(Icons.call),
-                ),
-              ]),
+              FilledButton.tonal(
+                onPressed: () => context.push('/load', extra: load),
+                child: const Text('View & request'),
+              ),
             ],
           ),
         ),
@@ -116,14 +114,4 @@ class _LoadCard extends ConsumerWidget {
   }
 
   Widget _chip(IconData i, String s) => Chip(avatar: Icon(i, size: 16), label: Text(s), visualDensity: VisualDensity.compact);
-
-  Future<void> _accept(BuildContext context, WidgetRef ref) async {
-    try {
-      await ref.read(dioProvider).post<dynamic>('loads/${load['id']}/accept');
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Load accepted.')));
-      await onAccepted();
-    } catch (_) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not accept the load.')));
-    }
-  }
 }

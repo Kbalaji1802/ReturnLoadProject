@@ -41,7 +41,7 @@ class SettingsScreen extends ConsumerWidget {
             const Divider(height: 1),
             _tile(context, Icons.support_agent, 'Support'),
             const Divider(height: 1),
-            ListTile(leading: const Icon(Icons.info_outline), title: const Text('About'), subtitle: const Text('ReturnLoad Driver · v0.4 (MVP)')),
+            const ListTile(leading: Icon(Icons.info_outline), title: Text('About'), subtitle: Text('ReturnLoad · v0.4 (MVP)')),
           ])),
           const SizedBox(height: 16),
           OutlinedButton.icon(
