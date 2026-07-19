@@ -64,6 +64,19 @@ public sealed class TripsController : ControllerBase
         return result.ToApiResult(HttpContext);
     }
 
+    /// <summary>The trip fulfilling a load — so the load owner can track their shipment.</summary>
+    [HttpGet("for-load/{loadId:guid}")]
+    public async Task<IActionResult> ForLoad(Guid loadId, CancellationToken cancellationToken)
+    {
+        if (!HttpContext.TryGetUserId(out Guid authUserId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _trips.GetForLoadAsync(authUserId, loadId, IsPrivileged, cancellationToken);
+        return result.ToApiResult(HttpContext);
+    }
+
     /// <summary>Advances the trip lifecycle (assigned → started → in-transit → completed / cancelled).</summary>
     [HttpPost("{id:guid}/status/{target}")]
     public async Task<IActionResult> Advance(Guid id, TripStatus target, CancellationToken cancellationToken)

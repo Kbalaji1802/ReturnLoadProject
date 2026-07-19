@@ -1,5 +1,6 @@
 using ReturnLoad.Application.Abstractions.Persistence;
 using ReturnLoad.Domain.Identity;
+using ReturnLoad.Domain.Loads;
 using ReturnLoad.Domain.Trips;
 using ReturnLoad.Domain.ValueObjects;
 using ReturnLoad.Shared.Results;
@@ -29,6 +30,9 @@ public interface ITripService
     /// <summary>All trips (ops/admin console).</summary>
     Task<Result<IReadOnlyList<TripView>>> ListAllAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>The trip fulfilling a load — for the load owner to track it (M6). Staff or owner.</summary>
+    Task<Result<TripView>> GetForLoadAsync(Guid authUserId, Guid loadId, bool privileged, CancellationToken cancellationToken = default);
+
     Task<Result> AdvanceAsync(Guid tripId, TripStatus target, CancellationToken cancellationToken = default);
 }
 
@@ -37,17 +41,20 @@ internal sealed class TripService : ITripService
     private readonly IRepository<Trip> _trips;
     private readonly IRepository<UserProfile> _users;
     private readonly IRepository<DriverProfile> _drivers;
+    private readonly IRepository<Load> _loads;
     private readonly IUnitOfWork _uow;
 
     public TripService(
         IRepository<Trip> trips,
         IRepository<UserProfile> users,
         IRepository<DriverProfile> drivers,
+        IRepository<Load> loads,
         IUnitOfWork uow)
     {
         _trips = trips;
         _users = users;
         _drivers = drivers;
+        _loads = loads;
         _uow = uow;
     }
 
@@ -97,6 +104,27 @@ internal sealed class TripService : ITripService
     {
         IReadOnlyList<Trip> trips = await _trips.ListAsync(_ => true, cancellationToken);
         return Result<IReadOnlyList<TripView>>.Success(trips.Select(MapView).ToList());
+    }
+
+    public async Task<Result<TripView>> GetForLoadAsync(Guid authUserId, Guid loadId, bool privileged, CancellationToken cancellationToken = default)
+    {
+        Trip? trip = (await _trips.ListAsync(t => t.LoadId == loadId, cancellationToken)).FirstOrDefault();
+        if (trip is null)
+        {
+            return Error.NotFound("No trip for this load yet.");
+        }
+
+        if (!privileged)
+        {
+            UserProfile? profile = (await _users.ListAsync(u => u.AuthUserId == authUserId, cancellationToken)).FirstOrDefault();
+            Load? load = await _loads.GetByIdAsync(loadId, cancellationToken);
+            if (profile is null || load is null || load.ShipperId != profile.Id)
+            {
+                return Error.Unauthorized("You can only track your own loads.");
+            }
+        }
+
+        return MapView(trip);
     }
 
     private static TripView MapView(Trip trip) =>
