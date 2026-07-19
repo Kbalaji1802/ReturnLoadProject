@@ -63,6 +63,20 @@ public sealed class LoadsController : ControllerBase
         return result.ToApiResult(HttpContext);
     }
 
+    /// <summary>The Load Owner's own loads across every status (My Loads).</summary>
+    [HttpGet("mine")]
+    [Authorize(Policy = AuthorizationPolicies.CanPostLoads)]
+    public async Task<IActionResult> Mine(CancellationToken cancellationToken)
+    {
+        if (!HttpContext.TryGetUserId(out Guid authUserId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _loads.ListMineAsync(authUserId, cancellationToken);
+        return result.ToApiResult(HttpContext);
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {

@@ -25,6 +25,9 @@ public interface ILoadService
 
     Task<Result<IReadOnlyList<LoadView>>> BrowseAvailableAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>The caller's own loads across every status (Load Owner "My Loads", M4.3 Step 6).</summary>
+    Task<Result<IReadOnlyList<LoadView>>> ListMineAsync(Guid authUserId, CancellationToken cancellationToken = default);
+
     Task<Result<LoadView>> GetAsync(Guid loadId, CancellationToken cancellationToken = default);
 
     /// <summary>Accept an available load (proposes + commits it for MVP).</summary>
@@ -80,6 +83,18 @@ internal sealed class LoadService : ILoadService
     public async Task<Result<IReadOnlyList<LoadView>>> BrowseAvailableAsync(CancellationToken cancellationToken = default)
     {
         IReadOnlyList<Load> loads = await _loads.ListAsync(l => l.Status == LoadStatus.Posted, cancellationToken);
+        return Result<IReadOnlyList<LoadView>>.Success(loads.Select(Map).ToList());
+    }
+
+    public async Task<Result<IReadOnlyList<LoadView>>> ListMineAsync(Guid authUserId, CancellationToken cancellationToken = default)
+    {
+        UserProfile? shipper = (await _users.ListAsync(u => u.AuthUserId == authUserId, cancellationToken)).FirstOrDefault();
+        if (shipper is null)
+        {
+            return Error.Validation("Complete your profile before viewing your loads.");
+        }
+
+        IReadOnlyList<Load> loads = await _loads.ListAsync(l => l.ShipperId == shipper.Id, cancellationToken);
         return Result<IReadOnlyList<LoadView>>.Success(loads.Select(Map).ToList());
     }
 

@@ -1,4 +1,5 @@
 using ReturnLoad.Application.Abstractions.Persistence;
+using ReturnLoad.Domain.Identity;
 using ReturnLoad.Domain.Tracking;
 using ReturnLoad.Domain.Trips;
 using ReturnLoad.Domain.ValueObjects;
@@ -29,6 +30,9 @@ public interface ITripService
 
     Task<Result<TripView>> GetAsync(Guid tripId, CancellationToken cancellationToken = default);
 
+    /// <summary>The authenticated driver's trips — current + history (My Trips, M4.3 Step 7).</summary>
+    Task<Result<IReadOnlyList<TripView>>> ListMineAsync(Guid authUserId, CancellationToken cancellationToken = default);
+
     Task<Result> AdvanceAsync(Guid tripId, TripStatus target, CancellationToken cancellationToken = default);
 
     Task<Result> RecordTrackingAsync(Guid tripId, RecordTrackingRequest request, CancellationToken cancellationToken = default);
@@ -40,12 +44,21 @@ internal sealed class TripService : ITripService
 {
     private readonly IRepository<Trip> _trips;
     private readonly IRepository<TrackingEvent> _tracking;
+    private readonly IRepository<UserProfile> _users;
+    private readonly IRepository<DriverProfile> _drivers;
     private readonly IUnitOfWork _uow;
 
-    public TripService(IRepository<Trip> trips, IRepository<TrackingEvent> tracking, IUnitOfWork uow)
+    public TripService(
+        IRepository<Trip> trips,
+        IRepository<TrackingEvent> tracking,
+        IRepository<UserProfile> users,
+        IRepository<DriverProfile> drivers,
+        IUnitOfWork uow)
     {
         _trips = trips;
         _tracking = tracking;
+        _users = users;
+        _drivers = drivers;
         _uow = uow;
     }
 
@@ -73,10 +86,26 @@ internal sealed class TripService : ITripService
     public async Task<Result<TripView>> GetAsync(Guid tripId, CancellationToken cancellationToken = default)
     {
         Trip? trip = await _trips.GetByIdAsync(tripId, cancellationToken);
-        return trip is null
-            ? Error.NotFound("Trip not found.")
-            : new TripView(trip.Id, trip.CarrierId, trip.VehicleId, trip.DriverProfileId, trip.Status, trip.StartedAtUtc, trip.CompletedAtUtc);
+        return trip is null ? Error.NotFound("Trip not found.") : MapView(trip);
     }
+
+    public async Task<Result<IReadOnlyList<TripView>>> ListMineAsync(Guid authUserId, CancellationToken cancellationToken = default)
+    {
+        UserProfile? profile = (await _users.ListAsync(u => u.AuthUserId == authUserId, cancellationToken)).FirstOrDefault();
+        DriverProfile? driver = profile is null
+            ? null
+            : (await _drivers.ListAsync(d => d.UserProfileId == profile.Id, cancellationToken)).FirstOrDefault();
+        if (driver is null)
+        {
+            return Error.Validation("Register as a driver first.");
+        }
+
+        IReadOnlyList<Trip> trips = await _trips.ListAsync(t => t.DriverProfileId == driver.Id, cancellationToken);
+        return Result<IReadOnlyList<TripView>>.Success(trips.Select(MapView).ToList());
+    }
+
+    private static TripView MapView(Trip trip) =>
+        new(trip.Id, trip.CarrierId, trip.VehicleId, trip.DriverProfileId, trip.Status, trip.StartedAtUtc, trip.CompletedAtUtc);
 
     /// <summary>
     /// Advances the trip one legal step toward <paramref name="target"/> (or cancels it). An
