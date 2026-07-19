@@ -7,6 +7,7 @@ using ReturnLoad.Application;
 using ReturnLoad.Application.Abstractions.Geo;
 using ReturnLoad.Application.UseCases.Bookings;
 using ReturnLoad.Application.UseCases.Documents;
+using ReturnLoad.Application.UseCases.Notifications;
 using ReturnLoad.Application.UseCases.Tracking;
 using ReturnLoad.Application.UseCases.Loads;
 using ReturnLoad.Application.UseCases.Onboarding;
@@ -212,6 +213,15 @@ public sealed class UseCaseFlowTests : IDisposable
 
         Result<TripLiveView> stranger = await tracking.GetLiveAsync(Guid.NewGuid(), accepted.Value, privileged: false);
         Assert.True(stranger.IsFailure);
+
+        // M7: the driver was notified of the approval; the owner of the request; both can read.
+        INotificationService notifications = _provider.GetRequiredService<INotificationService>();
+        IReadOnlyList<NotificationView> driverInbox = (await notifications.ListMineAsync(driverAuthId)).Value;
+        Assert.Contains(driverInbox, n => n.Subject == "Request approved");
+        Assert.True((await notifications.UnreadCountAsync(driverAuthId)).Value > 0);
+
+        IReadOnlyList<NotificationView> ownerInbox = (await notifications.ListMineAsync(shipperAuthId)).Value;
+        Assert.Contains(ownerInbox, n => n.Subject == "New load request");
     }
 
     [Fact]

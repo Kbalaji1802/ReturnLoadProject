@@ -1,4 +1,5 @@
 using ReturnLoad.Application.Abstractions.Persistence;
+using ReturnLoad.Application.UseCases.Notifications;
 using ReturnLoad.Domain.Identity;
 using ReturnLoad.Domain.Loads;
 using ReturnLoad.Domain.Trips;
@@ -42,6 +43,7 @@ internal sealed class TripService : ITripService
     private readonly IRepository<UserProfile> _users;
     private readonly IRepository<DriverProfile> _drivers;
     private readonly IRepository<Load> _loads;
+    private readonly INotificationService _notify;
     private readonly IUnitOfWork _uow;
 
     public TripService(
@@ -49,12 +51,14 @@ internal sealed class TripService : ITripService
         IRepository<UserProfile> users,
         IRepository<DriverProfile> drivers,
         IRepository<Load> loads,
+        INotificationService notify,
         IUnitOfWork uow)
     {
         _trips = trips;
         _users = users;
         _drivers = drivers;
         _loads = loads;
+        _notify = notify;
         _uow = uow;
     }
 
@@ -144,6 +148,20 @@ internal sealed class TripService : ITripService
 
         trip.Advance(target);
         _trips.Update(trip);
+
+        // Notify the load owner at the milestones they care about.
+        if (trip.LoadId is Guid loadId && target is TripStatus.DriverEnRoute or TripStatus.Completed)
+        {
+            Load? load = await _loads.GetByIdAsync(loadId, cancellationToken);
+            if (load is not null)
+            {
+                string message = target == TripStatus.Completed
+                    ? "Your load has been delivered — the trip is complete."
+                    : "Your driver has started the trip.";
+                await _notify.NotifyUserAsync(load.ShipperId, target == TripStatus.Completed ? "Trip completed" : "Trip started", message, cancellationToken);
+            }
+        }
+
         await _uow.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

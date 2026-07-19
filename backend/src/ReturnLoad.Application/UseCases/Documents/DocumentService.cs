@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using ReturnLoad.Application.Abstractions.Persistence;
 using ReturnLoad.Application.Abstractions.Storage;
+using ReturnLoad.Application.UseCases.Notifications;
 using ReturnLoad.Domain.Documents;
 using ReturnLoad.Domain.Identity;
 using ReturnLoad.Shared.Api;
@@ -46,6 +47,7 @@ internal sealed class DocumentService : IDocumentService
     private readonly IRepository<DriverProfile> _drivers;
     private readonly IFileStorageService _storage;
     private readonly FileUploadOptions _uploadOptions;
+    private readonly INotificationService _notify;
     private readonly IUnitOfWork _uow;
 
     public DocumentService(
@@ -53,12 +55,14 @@ internal sealed class DocumentService : IDocumentService
         IRepository<DriverProfile> drivers,
         IFileStorageService storage,
         IOptions<FileUploadOptions> uploadOptions,
+        INotificationService notify,
         IUnitOfWork uow)
     {
         _documents = documents;
         _drivers = drivers;
         _storage = storage;
         _uploadOptions = uploadOptions.Value;
+        _notify = notify;
         _uow = uow;
     }
 
@@ -107,6 +111,11 @@ internal sealed class DocumentService : IDocumentService
                 driver.MarkVerified();
                 _drivers.Update(driver);
             }
+        }
+
+        if (document.OwnerType == DocumentOwnerType.Driver)
+        {
+            await _notify.NotifyDriverAsync(document.OwnerId, "Document approved", "Your document was verified by our team.", cancellationToken);
         }
 
         await _uow.SaveChangesAsync(cancellationToken);

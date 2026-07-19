@@ -188,6 +188,7 @@ internal sealed class VehicleService : IVehicleService
     private readonly IRepository<UserProfile> _users;
     private readonly IRepository<DriverProfile> _drivers;
     private readonly IRepository<Association> _associations;
+    private readonly Notifications.INotificationService _notify;
     private readonly IUnitOfWork _uow;
 
     public VehicleService(
@@ -196,6 +197,7 @@ internal sealed class VehicleService : IVehicleService
         IRepository<UserProfile> users,
         IRepository<DriverProfile> drivers,
         IRepository<Association> associations,
+        Notifications.INotificationService notify,
         IUnitOfWork uow)
     {
         _vehicles = vehicles;
@@ -203,6 +205,7 @@ internal sealed class VehicleService : IVehicleService
         _users = users;
         _drivers = drivers;
         _associations = associations;
+        _notify = notify;
         _uow = uow;
     }
 
@@ -306,6 +309,16 @@ internal sealed class VehicleService : IVehicleService
 
         vehicle.Activate(mandatoryDocumentsValid);
         _vehicles.Update(vehicle);
+
+        // Notify the carrier's driver(s) that their vehicle is now approved.
+        IReadOnlyList<Association> members = await _associations.ListAsync(
+            a => a.CarrierId == vehicle.CarrierId && a.Role == AssociationRole.Driver && a.Status != AssociationStatus.Revoked,
+            cancellationToken);
+        foreach (Association member in members)
+        {
+            await _notify.NotifyUserAsync(member.MemberUserProfileId, "Vehicle approved", $"Your vehicle {vehicle.Registration.Value} is verified and ready for loads.", cancellationToken);
+        }
+
         await _uow.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

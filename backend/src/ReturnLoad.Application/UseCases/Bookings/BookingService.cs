@@ -1,4 +1,5 @@
 using ReturnLoad.Application.Abstractions.Persistence;
+using ReturnLoad.Application.UseCases.Notifications;
 using ReturnLoad.Domain.Bookings;
 using ReturnLoad.Domain.Fleet;
 using ReturnLoad.Domain.Identity;
@@ -49,6 +50,7 @@ internal sealed class BookingService : IBookingService
     private readonly IRepository<Vehicle> _vehicles;
     private readonly IRepository<Load> _loads;
     private readonly IRepository<Trip> _trips;
+    private readonly INotificationService _notify;
     private readonly IUnitOfWork _uow;
 
     public BookingService(
@@ -59,6 +61,7 @@ internal sealed class BookingService : IBookingService
         IRepository<Vehicle> vehicles,
         IRepository<Load> loads,
         IRepository<Trip> trips,
+        INotificationService notify,
         IUnitOfWork uow)
     {
         _bookings = bookings;
@@ -68,6 +71,7 @@ internal sealed class BookingService : IBookingService
         _vehicles = vehicles;
         _loads = loads;
         _trips = trips;
+        _notify = notify;
         _uow = uow;
     }
 
@@ -138,6 +142,7 @@ internal sealed class BookingService : IBookingService
 
         BookingRequest request = BookingRequest.Create(loadId, driver.Id, vehicle.CarrierId, vehicleId);
         await _bookings.AddAsync(request, cancellationToken);
+        await _notify.NotifyUserAsync(load.ShipperId, "New load request", "A verified driver requested one of your loads.", cancellationToken);
         await _uow.SaveChangesAsync(cancellationToken);
         return request.Id;
     }
@@ -198,8 +203,10 @@ internal sealed class BookingService : IBookingService
         {
             other.Reject();
             _bookings.Update(other);
+            await _notify.NotifyDriverAsync(other.DriverProfileId, "Request not selected", "The load owner chose another driver for this load.", cancellationToken);
         }
 
+        await _notify.NotifyDriverAsync(request.DriverProfileId, "Request approved", "Your load request was approved — a trip has been created.", cancellationToken);
         await _uow.SaveChangesAsync(cancellationToken);
         return trip.Id;
     }
@@ -231,6 +238,7 @@ internal sealed class BookingService : IBookingService
 
         request.Reject();
         _bookings.Update(request);
+        await _notify.NotifyDriverAsync(request.DriverProfileId, "Request rejected", "Your load request was not accepted.", cancellationToken);
         await _uow.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }
