@@ -1,6 +1,7 @@
 using System.Reflection;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using ReturnLoad.Application.UseCases.Bookings;
 using ReturnLoad.Application.UseCases.Documents;
 using ReturnLoad.Application.UseCases.Loads;
 using ReturnLoad.Application.UseCases.Matching;
@@ -35,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<ILoadService, LoadService>();
         services.AddScoped<ITripService, TripService>();
         services.AddScoped<IMatchingService, MatchingService>();
+        services.AddScoped<IBookingService, BookingService>();
 
         return services;
     }

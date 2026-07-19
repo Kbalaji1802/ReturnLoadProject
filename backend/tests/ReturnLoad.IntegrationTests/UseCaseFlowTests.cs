@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ReturnLoad.Application;
 using ReturnLoad.Application.Abstractions.Geo;
+using ReturnLoad.Application.UseCases.Bookings;
 using ReturnLoad.Application.UseCases.Documents;
 using ReturnLoad.Application.UseCases.Loads;
 using ReturnLoad.Application.UseCases.Onboarding;
@@ -139,6 +140,60 @@ public sealed class UseCaseFlowTests : IDisposable
         TripView trip = (await trips.GetAsync(tripId)).Value;
         Assert.Equal(TripStatus.Completed, trip.Status);
         Assert.NotNull(trip.CompletedAtUtc);
+    }
+
+    [Fact]
+    public async Task Booking_request_then_owner_accept_creates_a_trip_and_assigns_the_load()
+    {
+        Guid driverAuthId = Guid.NewGuid();
+        Guid shipperAuthId = Guid.NewGuid();
+
+        ApplicationDbContext db = _provider.GetRequiredService<ApplicationDbContext>();
+        UserProfile shipperProfile = UserProfile.Create(shipperAuthId, "Shipper", MobileNumber.Create("9800000019"));
+        db.UserProfiles.Add(shipperProfile);
+        await db.SaveChangesAsync();
+
+        // Carrier + a driver under it, verified via an approved licence.
+        Guid carrierId = (await _provider.GetRequiredService<ICarrierService>()
+            .RegisterAsync(new RegisterCarrierRequest("Madurai Movers", "9800000020", null))).Value;
+        DriverRegistrationResult driver = (await _provider.GetRequiredService<IDriverOnboardingService>()
+            .RegisterAsync(driverAuthId, new RegisterDriverRequest("Vel", "9800000021", null, "TN0120200005678", null, carrierId))).Value;
+
+        IDocumentService documents = _provider.GetRequiredService<IDocumentService>();
+        using MemoryStream licence = new(Encoding.UTF8.GetBytes("dummy-pdf"));
+        Guid docId = (await documents.SubmitAsync(
+            new SubmitDocumentRequest(DocumentOwnerType.Driver, driver.DriverProfileId, DocumentType.DrivingLicence, "DL-2", null, new DateOnly(2030, 1, 1)),
+            licence, "licence.pdf", "application/pdf", licence.Length)).Value;
+        Assert.True((await documents.ApproveAsync(docId)).IsSuccess);
+
+        // A verified (Active) vehicle in the carrier's fleet.
+        IVehicleService vehicles = _provider.GetRequiredService<IVehicleService>();
+        Guid vehicleId = (await vehicles.RegisterAsync(new RegisterVehicleRequest(carrierId, "TN58AB9999", VehicleType.OpenBody, 12000m, null))).Value;
+        Assert.True((await vehicles.ActivateAsync(vehicleId, mandatoryDocumentsValid: true)).IsSuccess);
+
+        // Shipper posts a load.
+        ILoadService loads = _provider.GetRequiredService<ILoadService>();
+        Guid loadId = (await loads.PostAsync(shipperAuthId, new PostLoadRequest(
+            13.08, 80.27, "Chennai", 9.92, 78.11, "Madurai",
+            DateTimeOffset.UtcNow.AddHours(2), DateTimeOffset.UtcNow.AddHours(8),
+            CargoType.General, 5000m, 15000m))).Value;
+
+        // Step 3: the driver requests the load. Step 4: the owner accepts → a trip is created.
+        IBookingService bookings = _provider.GetRequiredService<IBookingService>();
+        Guid requestId = (await bookings.RequestAsync(driverAuthId, loadId, vehicleId)).Value;
+        Result<Guid> accepted = await bookings.AcceptAsync(shipperAuthId, requestId);
+        Assert.True(accepted.IsSuccess);
+
+        // The load is assigned (Booked) and a trip now exists for this driver + vehicle.
+        Load assignedLoad = await db.Loads.AsNoTracking().FirstAsync(l => l.Id == loadId);
+        Assert.Equal(LoadStatus.Booked, assignedLoad.Status);
+        Domain.Trips.Trip trip = await db.Trips.AsNoTracking().FirstAsync(t => t.Id == accepted.Value);
+        Assert.Equal(driver.DriverProfileId, trip.DriverProfileId);
+        Assert.Equal(vehicleId, trip.VehicleId);
+
+        // The request is now Accepted.
+        Domain.Bookings.BookingRequest request = await db.BookingRequests.AsNoTracking().FirstAsync(b => b.Id == requestId);
+        Assert.Equal(Domain.Bookings.BookingRequestStatus.Accepted, request.Status);
     }
 
     public void Dispose()
