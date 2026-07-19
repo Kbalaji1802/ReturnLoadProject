@@ -7,6 +7,7 @@ import '../../core/enums.dart';
 import '../../services/dio_client.dart';
 import '../../services/location_service.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/rating_dialog.dart';
 import '../../shared/widgets/skeleton.dart';
 import '../../shared/widgets/status_pill.dart';
 
@@ -244,16 +245,26 @@ class _TripsTabState extends ConsumerState<TripsTab> {
     );
   }
 
-  Widget _historyCard(Map<String, dynamic> t) => Card(
-        child: ListTile(
-          leading: Icon(
-            (t['status'] as int? ?? 0) == 8 ? Icons.check_circle : Icons.cancel,
-            color: (t['status'] as int? ?? 0) == 8 ? AppColors.success : AppColors.error,
-          ),
-          title: Text(labelOf(tripStatus, t['status'])),
-          subtitle: Text('Trip ${(t['id'] as String).substring(0, 8)}…'),
-        ),
-      );
+  Widget _historyCard(Map<String, dynamic> t) {
+    final completed = (t['status'] as int? ?? 0) == 8;
+    return Card(
+      child: ListTile(
+        leading: Icon(completed ? Icons.check_circle : Icons.cancel, color: completed ? AppColors.success : AppColors.error),
+        title: Text(labelOf(tripStatus, t['status'])),
+        subtitle: Text('Trip ${(t['id'] as String).substring(0, 8)}…'),
+        trailing: completed
+            ? TextButton.icon(
+                onPressed: () async {
+                  final ok = await showRatingDialog(context, ref, t['id'] as String, 'the load owner');
+                  if (ok && mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thanks for your review!')));
+                },
+                icon: const Icon(Icons.star, size: 18),
+                label: const Text('Rate'),
+              )
+            : null,
+      ),
+    );
+  }
 
   Widget _empty() => ListView(children: [
         const SizedBox(height: 100),

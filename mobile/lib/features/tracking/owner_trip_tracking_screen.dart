@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import '../../core/enums.dart';
 import '../../services/dio_client.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/rating_dialog.dart';
 import '../../shared/widgets/status_pill.dart';
 
 /// "Where is my truck?" — the load owner's live tracking of their shipment's trip (M6). Resolves
@@ -119,6 +120,17 @@ class _State extends ConsumerState<OwnerTripTrackingScreen> {
                 const SizedBox(width: 20),
                 _metric(Icons.schedule, 'ETA', live['etaMinutes'] != null ? _eta(live['etaMinutes']) : '—'),
               ]),
+            if (live != null && live['status'] == 8 && _tripId != null) ...[
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () async {
+                  final ok = await showRatingDialog(context, ref, _tripId!, 'the driver');
+                  if (ok && mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thanks for your review!')));
+                },
+                icon: const Icon(Icons.star),
+                label: const Text('Rate the driver'),
+              ),
+            ],
           ]),
         ),
       );
