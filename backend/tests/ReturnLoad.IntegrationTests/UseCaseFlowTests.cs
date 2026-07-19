@@ -196,6 +196,29 @@ public sealed class UseCaseFlowTests : IDisposable
         Assert.Equal(Domain.Bookings.BookingRequestStatus.Accepted, request.Status);
     }
 
+    [Fact]
+    public async Task Driver_adding_a_vehicle_creates_an_owner_operator_carrier()
+    {
+        Guid driverAuthId = Guid.NewGuid();
+
+        // A driver with no carrier (self-registered, carrierId null).
+        await _provider.GetRequiredService<IDriverOnboardingService>()
+            .RegisterAsync(driverAuthId, new RegisterDriverRequest("Solo", "9800000031", null, "TN0120200009999", null, null));
+
+        IVehicleService vehicles = _provider.GetRequiredService<IVehicleService>();
+        Guid vehicleId = (await vehicles.RegisterForDriverAsync(
+            driverAuthId, new RegisterDriverVehicleRequest("TN59CD1234", VehicleType.OpenBody, 9000m, null))).Value;
+
+        // The vehicle is listed for the driver and a carrier was created to own it.
+        IReadOnlyList<VehicleView> mine = (await vehicles.ListForDriverAsync(driverAuthId)).Value;
+        VehicleView view = Assert.Single(mine);
+        Assert.Equal(vehicleId, view.Id);
+        Assert.Equal(VehicleStatus.Draft, view.Status);
+
+        ApplicationDbContext db = _provider.GetRequiredService<ApplicationDbContext>();
+        Assert.True(await db.Carriers.AsNoTracking().AnyAsync(c => c.Id == view.CarrierId));
+    }
+
     public void Dispose()
     {
         _provider.Dispose();
