@@ -117,9 +117,11 @@ export class MainLayout {
   protected readonly navItems: readonly NavItem[] = [
     { label: 'Dashboard', icon: 'dashboard', route: '/dashboard' },
     { label: 'Drivers', icon: 'badge', route: '/drivers' },
+    { label: 'Vehicles', icon: 'local_shipping', route: '/vehicles' },
     { label: 'Documents', icon: 'verified', route: '/documents' },
     { label: 'Loads', icon: 'inventory_2', route: '/loads' },
-    { label: 'Trips', icon: 'local_shipping', route: '/trips' },
+    { label: 'Booking requests', icon: 'how_to_reg', route: '/bookings' },
+    { label: 'Trips', icon: 'route', route: '/trips' },
     { label: 'Settings', icon: 'settings', route: '/settings' },
   ];
 

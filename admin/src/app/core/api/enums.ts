@@ -10,12 +10,17 @@ export const VERIFICATION_STATUS: Record<number, string> = {
 };
 
 export const LOAD_STATUS: Record<number, string> = {
-  0: 'Draft', 1: 'Posted', 2: 'Matched', 3: 'Booked', 4: 'InTransit', 5: 'Delivered', 6: 'Cancelled',
+  0: 'Draft', 1: 'Open', 2: 'Matched', 3: 'Assigned', 4: 'In transit', 5: 'Delivered', 6: 'Cancelled',
 };
 
 export const TRIP_STATUS: Record<number, string> = {
-  0: 'Created', 1: 'Assigned', 2: 'Started', 3: 'InTransit', 4: 'Completed', 5: 'Cancelled',
+  0: 'Created', 1: 'Driver accepted', 2: 'En route', 3: 'Arrived pickup', 4: 'Loaded',
+  5: 'In transit', 6: 'Arrived destination', 7: 'Unloaded', 8: 'Completed', 9: 'Cancelled',
 };
+
+export const VEHICLE_STATUS: Record<number, string> = { 0: 'Pending', 1: 'Verified', 2: 'Maintenance', 3: 'Suspended' };
+
+export const BOOKING_STATUS: Record<number, string> = { 0: 'Pending', 1: 'Approved', 2: 'Rejected', 3: 'Withdrawn' };
 
 export const DOCUMENT_TYPE: Record<number, string> = {
   0: 'Driver KYC', 1: 'Registration Certificate', 2: 'Insurance', 3: 'Driving Licence', 4: 'Permit',

@@ -11,44 +11,44 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
 
 import { ApiService } from '../../core/api/api.service';
-import { TRIP_STATUS, label } from '../../core/api/enums';
+import { BOOKING_STATUS, label } from '../../core/api/enums';
 import { PageHeader } from '../../shared/ui/page-header';
 import { StatusChip } from '../../shared/ui/status-chip';
 import { EmptyState } from '../../shared/ui/empty-state';
 
-interface TripView {
+interface BookingRequestView {
   readonly id: string;
-  readonly carrierId: string;
+  readonly loadId: string;
   readonly vehicleId: string;
-  readonly driverProfileId: string;
   readonly status: number;
-  readonly startedAtUtc: string | null;
-  readonly completedAtUtc: string | null;
+  readonly createdAtUtc: string;
+  readonly driverName: string | null;
+  readonly vehicleRegistration: string | null;
 }
 
 @Component({
-  selector: 'app-trips',
+  selector: 'app-bookings',
   imports: [
     DatePipe, FormsModule, MatTableModule, MatPaginatorModule, MatFormFieldModule, MatInputModule,
     MatSelectModule, MatButtonModule, MatIconModule, MatProgressBarModule, PageHeader, StatusChip, EmptyState,
   ],
   template: `
     <div class="rl-page">
-      <rl-page-header title="Trips" subtitle="Every trip and its lifecycle status">
+      <rl-page-header title="Booking requests" subtitle="Every driver request across the marketplace">
         <button actions mat-stroked-button (click)="load()"><mat-icon>refresh</mat-icon> Refresh</button>
       </rl-page-header>
 
       <div class="rl-toolbar">
         <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search">
           <mat-icon matPrefix>search</mat-icon>
-          <mat-label>Search trip / driver / vehicle id</mat-label>
+          <mat-label>Search driver or vehicle</mat-label>
           <input matInput [ngModel]="query()" (ngModelChange)="onQuery($event)" />
         </mat-form-field>
         <mat-form-field appearance="outline" subscriptSizing="dynamic">
           <mat-label>Status</mat-label>
           <mat-select [ngModel]="statusFilter()" (ngModelChange)="onStatus($event)">
             <mat-option [value]="-1">All</mat-option>
-            @for (s of statuses; track s) { <mat-option [value]="s">{{ tripStatus(s) }}</mat-option> }
+            @for (s of statuses; track s) { <mat-option [value]="s">{{ bookingStatus(s) }}</mat-option> }
           </mat-select>
         </mat-form-field>
       </div>
@@ -56,28 +56,24 @@ interface TripView {
       <div class="rl-surface">
         @if (busy()) { <mat-progress-bar mode="indeterminate" /> }
         @if (!busy() && filtered().length === 0) {
-          <rl-empty-state icon="local_shipping" title="No trips" message="Trips appear once load owners approve drivers." />
+          <rl-empty-state icon="how_to_reg" title="No booking requests" message="Requests appear as drivers apply for loads." />
         } @else {
           <table mat-table [dataSource]="paged()" class="rl-table">
-            <ng-container matColumnDef="id">
-              <th mat-header-cell *matHeaderCellDef>Trip</th>
-              <td mat-cell *matCellDef="let t" class="mono">{{ t.id.slice(0, 8) }}…</td>
-            </ng-container>
-            <ng-container matColumnDef="status">
-              <th mat-header-cell *matHeaderCellDef>Status</th>
-              <td mat-cell *matCellDef="let t"><rl-status-chip [label]="tripStatus(t.status)" /></td>
-            </ng-container>
             <ng-container matColumnDef="driver">
               <th mat-header-cell *matHeaderCellDef>Driver</th>
-              <td mat-cell *matCellDef="let t" class="mono">{{ t.driverProfileId.slice(0, 8) }}…</td>
+              <td mat-cell *matCellDef="let b">{{ b.driverName || '—' }}</td>
             </ng-container>
             <ng-container matColumnDef="vehicle">
               <th mat-header-cell *matHeaderCellDef>Vehicle</th>
-              <td mat-cell *matCellDef="let t" class="mono">{{ t.vehicleId.slice(0, 8) }}…</td>
+              <td mat-cell *matCellDef="let b">{{ b.vehicleRegistration || '—' }}</td>
             </ng-container>
-            <ng-container matColumnDef="started">
-              <th mat-header-cell *matHeaderCellDef>Started</th>
-              <td mat-cell *matCellDef="let t">{{ t.startedAtUtc ? (t.startedAtUtc | date: 'short') : '—' }}</td>
+            <ng-container matColumnDef="requested">
+              <th mat-header-cell *matHeaderCellDef>Requested</th>
+              <td mat-cell *matCellDef="let b">{{ b.createdAtUtc | date: 'short' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="status">
+              <th mat-header-cell *matHeaderCellDef>Status</th>
+              <td mat-cell *matCellDef="let b"><rl-status-chip [label]="bookingStatus(b.status)" /></td>
             </ng-container>
             <tr mat-header-row *matHeaderRowDef="cols"></tr>
             <tr mat-row *matRowDef="let row; columns: cols"></tr>
@@ -88,15 +84,15 @@ interface TripView {
       </div>
     </div>
   `,
-  styles: [`.search { min-width: 300px; } .mono { font-family: ui-monospace, monospace; font-size: 0.8rem; color: var(--mat-sys-on-surface-variant); }`],
+  styles: [`.search { min-width: 280px; }`],
 })
-export class Trips {
+export class Bookings {
   private readonly api = inject(ApiService);
-  protected readonly cols = ['id', 'status', 'driver', 'vehicle', 'started'];
-  protected readonly statuses = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+  protected readonly cols = ['driver', 'vehicle', 'requested', 'status'];
+  protected readonly statuses = [0, 1, 2, 3];
 
   protected readonly busy = signal(true);
-  protected readonly all = signal<TripView[]>([]);
+  protected readonly all = signal<BookingRequestView[]>([]);
   protected readonly query = signal('');
   protected readonly statusFilter = signal(-1);
   protected readonly pageIndex = signal(0);
@@ -106,8 +102,8 @@ export class Trips {
     const q = this.query().trim().toLowerCase();
     const s = this.statusFilter();
     return this.all().filter(
-      (t) => (s === -1 || t.status === s) &&
-        (q === '' || t.id.includes(q) || t.driverProfileId.includes(q) || t.vehicleId.includes(q)),
+      (b) => (s === -1 || b.status === s) &&
+        (q === '' || (b.driverName ?? '').toLowerCase().includes(q) || (b.vehicleRegistration ?? '').toLowerCase().includes(q)),
     );
   });
 
@@ -120,15 +116,15 @@ export class Trips {
     this.load();
   }
 
-  protected tripStatus = (v: number) => label(TRIP_STATUS, v);
+  protected bookingStatus = (v: number) => label(BOOKING_STATUS, v);
   protected onQuery(v: string) { this.query.set(v); this.pageIndex.set(0); }
   protected onStatus(v: number) { this.statusFilter.set(v); this.pageIndex.set(0); }
   protected onPage(e: PageEvent) { this.pageIndex.set(e.pageIndex); this.pageSize.set(e.pageSize); }
 
   protected load(): void {
     this.busy.set(true);
-    this.api.get<TripView[]>('trips').subscribe({
-      next: (t) => { this.all.set(t); this.busy.set(false); },
+    this.api.get<BookingRequestView[]>('bookings').subscribe({
+      next: (b) => { this.all.set(b); this.busy.set(false); },
       error: () => this.busy.set(false),
     });
   }
