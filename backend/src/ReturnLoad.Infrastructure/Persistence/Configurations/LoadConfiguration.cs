@@ -15,6 +15,8 @@ public sealed class LoadConfiguration : AggregateConfiguration<Load>
 
         builder.Property(l => l.ShipperId).IsRequired();
         builder.Property(l => l.Status).HasConversion<string>().HasMaxLength(16).IsRequired();
+        builder.Property(l => l.DistanceKm).HasPrecision(9, 2);
+        builder.Property(l => l.EstimatedDurationMinutes);
         builder.Property(l => l.CreatedAtUtc).IsRequired();
 
         builder.OwnsOne(l => l.Origin, o =>

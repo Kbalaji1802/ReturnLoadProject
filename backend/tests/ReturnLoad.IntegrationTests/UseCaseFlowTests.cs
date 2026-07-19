@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ReturnLoad.Application;
+using ReturnLoad.Application.Abstractions.Geo;
 using ReturnLoad.Application.UseCases.Documents;
 using ReturnLoad.Application.UseCases.Loads;
 using ReturnLoad.Application.UseCases.Onboarding;
@@ -61,6 +62,10 @@ public sealed class UseCaseFlowTests : IDisposable
         services.AddDbContext<ApplicationDbContext>(o => o.UseSqlite(_connection));
         services.Configure<Shared.Configuration.FileUploadOptions>(_ => { });
 
+        // Replace the real OSRM route provider so posting a load computes distance/ETA from a
+        // deterministic stub instead of hitting the network (last registration wins).
+        services.AddSingleton<IRouteService>(new FakeRouteService());
+
         _provider = services.BuildServiceProvider();
         _provider.GetRequiredService<ApplicationDbContext>().Database.EnsureCreated();
     }
@@ -109,7 +114,10 @@ public sealed class UseCaseFlowTests : IDisposable
             DateTimeOffset.UtcNow.AddHours(2), DateTimeOffset.UtcNow.AddHours(8),
             CargoType.General, 5000m, 15000m))).Value;
 
-        Assert.Contains((await loads.BrowseAvailableAsync()).Value, l => l.Id == loadId);
+        LoadView posted = (await loads.BrowseAvailableAsync()).Value.Single(l => l.Id == loadId);
+        // The platform computed and stored the route metrics (M4.3 Step 1) — not the shipper.
+        Assert.Equal(497.50m, posted.DistanceKm);
+        Assert.Equal(540, posted.EstimatedDurationMinutes);
         Assert.True((await loads.AcceptAsync(loadId)).IsSuccess);
 
         // 7) Create a trip and drive it to completion.
@@ -133,5 +141,14 @@ public sealed class UseCaseFlowTests : IDisposable
     {
         _provider.Dispose();
         _connection.Dispose();
+    }
+
+    /// <summary>Deterministic route provider for tests — 497.50 km / 9 hours, no network.</summary>
+    private sealed class FakeRouteService : IRouteService
+    {
+        public Task<RouteResult?> GetRouteAsync(
+            double originLatitude, double originLongitude, double destinationLatitude, double destinationLongitude,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<RouteResult?>(new RouteResult(497.50m, TimeSpan.FromHours(9)));
     }
 }

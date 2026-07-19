@@ -100,5 +100,6 @@ internal sealed class MatchingService : IMatchingService
     private static LoadView Map(Load l) => new(
         l.Id, l.ShipperId, l.Origin.Address, l.Destination.Address,
         l.PickupWindow.Start, l.PickupWindow.End, l.Requirement.CargoType,
-        l.Requirement.Weight.Kilograms, l.OfferedPrice?.Amount, l.Status);
+        l.Requirement.Weight.Kilograms, l.OfferedPrice?.Amount, l.Status,
+        l.DistanceKm, l.EstimatedDurationMinutes);
 }

@@ -55,6 +55,12 @@ public sealed class Load : AggregateRoot<Guid>
 
     public LoadStatus Status { get; private set; }
 
+    /// <summary>Road distance origin→destination in km, computed by the platform (M4.3 Step 1).</summary>
+    public decimal? DistanceKm { get; private set; }
+
+    /// <summary>Estimated drive time origin→destination in minutes, computed by the platform.</summary>
+    public int? EstimatedDurationMinutes { get; private set; }
+
     public DateTimeOffset CreatedAtUtc { get; }
 
     public static Load Create(
@@ -75,6 +81,18 @@ public sealed class Load : AggregateRoot<Guid>
         Load load = new(Guid.NewGuid(), shipperId, origin, destination, pickupWindow, requirement, offeredPrice);
         load.Raise(new LoadCreated(load.Id, shipperId, load.CreatedAtUtc));
         return load;
+    }
+
+    /// <summary>
+    /// Records the platform-computed road distance + estimated duration for this load
+    /// (M4.3 Step 1). Derived from a route provider at posting; the shipper never enters it.
+    /// </summary>
+    public void SetRoute(decimal distanceKm, int estimatedDurationMinutes)
+    {
+        Guard.AgainstNegative(distanceKm, "Distance", "load_distance_negative");
+        Guard.Against(estimatedDurationMinutes < 0, "Estimated duration cannot be negative.", "load_duration_negative");
+        DistanceKm = distanceKm;
+        EstimatedDurationMinutes = estimatedDurationMinutes;
     }
 
     public void Post()
