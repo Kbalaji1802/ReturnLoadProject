@@ -10,8 +10,8 @@ namespace ReturnLoad.Domain.Trips;
 /// <list type="bullet">
 /// <item>Carrier, vehicle, driver, origin, destination, and a return leg are required.</item>
 /// <item>Origin and destination must differ.</item>
-/// <item>Legal transitions only: Created → Assigned → Started → InTransit → Completed;
-/// cancellable before completion. Completion records a timestamp.</item>
+/// <item>Legal transitions only — one step at a time along the M4.3 lifecycle (Created →
+/// DriverAccepted → … → Completed); cancellable before completion. Completion records a timestamp.</item>
 /// </list>
 /// </summary>
 public sealed class Trip : AggregateRoot<Guid>
@@ -81,35 +81,48 @@ public sealed class Trip : AggregateRoot<Guid>
         return trip;
     }
 
-    public void Assign()
-    {
-        Guard.Against(Status != TripStatus.Created, "Only a created trip can be assigned.", "trip_not_created");
-        Status = TripStatus.Assigned;
-    }
+    /// <summary>The ordered forward lifecycle (M4.3 Step 5). Cancelled is a branch, not in it.</summary>
+    private static readonly TripStatus[] Lifecycle =
+    [
+        TripStatus.Created, TripStatus.DriverAccepted, TripStatus.DriverEnRoute, TripStatus.ArrivedPickup,
+        TripStatus.Loaded, TripStatus.InTransit, TripStatus.ArrivedDestination, TripStatus.Unloaded,
+        TripStatus.Completed,
+    ];
 
-    public void Start()
+    /// <summary>
+    /// Advances the trip exactly one legal step toward <paramref name="target"/>, or cancels it.
+    /// Only the immediate next state (or Cancelled, before completion) is permitted — no skipping.
+    /// Entering <see cref="TripStatus.DriverEnRoute"/> stamps the start; reaching
+    /// <see cref="TripStatus.Completed"/> stamps completion.
+    /// </summary>
+    public void Advance(TripStatus target)
     {
-        Guard.Against(Status != TripStatus.Assigned, "Only an assigned trip can start.", "trip_not_assigned");
-        Status = TripStatus.Started;
-        StartedAtUtc = DateTimeOffset.UtcNow;
-        Raise(new TripStarted(Id, StartedAtUtc.Value));
-    }
+        if (target == TripStatus.Cancelled)
+        {
+            Cancel();
+            return;
+        }
 
-    public void MarkInTransit()
-    {
-        Guard.Against(Status != TripStatus.Started, "Only a started trip can move to in-transit.", "trip_not_started");
-        Status = TripStatus.InTransit;
-    }
-
-    public void Complete()
-    {
+        int currentIndex = Array.IndexOf(Lifecycle, Status);
+        int targetIndex = Array.IndexOf(Lifecycle, target);
+        Guard.Against(currentIndex < 0, "A finished trip cannot advance.", "trip_finished");
         Guard.Against(
-            Status is not (TripStatus.Started or TripStatus.InTransit),
-            "Only a started or in-transit trip can complete.",
-            "trip_not_completable");
-        Status = TripStatus.Completed;
-        CompletedAtUtc = DateTimeOffset.UtcNow;
-        Raise(new TripCompleted(Id, CompletedAtUtc.Value));
+            targetIndex != currentIndex + 1,
+            $"Illegal trip transition from {Status} to {target}.",
+            "trip_illegal_transition");
+
+        Status = target;
+
+        if (target == TripStatus.DriverEnRoute)
+        {
+            StartedAtUtc = DateTimeOffset.UtcNow;
+            Raise(new TripStarted(Id, StartedAtUtc.Value));
+        }
+        else if (target == TripStatus.Completed)
+        {
+            CompletedAtUtc = DateTimeOffset.UtcNow;
+            Raise(new TripCompleted(Id, CompletedAtUtc.Value));
+        }
     }
 
     public void Cancel()

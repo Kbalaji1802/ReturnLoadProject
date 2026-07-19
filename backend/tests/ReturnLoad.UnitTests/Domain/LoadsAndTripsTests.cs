@@ -55,27 +55,41 @@ public sealed class LoadsAndTripsTests
     }
 
     [Fact]
-    public void Trip_start_and_complete_raise_events_and_stamp_times()
+    public void Trip_advances_through_the_lifecycle_stamping_start_and_completion()
     {
         Trip trip = NewTrip();
-        trip.Assign();
-        trip.Start();
-        Assert.Equal(TripStatus.Started, trip.Status);
+        trip.Advance(TripStatus.DriverAccepted);
+        trip.Advance(TripStatus.DriverEnRoute);
+        Assert.Equal(TripStatus.DriverEnRoute, trip.Status);
         Assert.NotNull(trip.StartedAtUtc);
         Assert.Contains(trip.DomainEvents, e => e is TripStarted);
 
-        trip.MarkInTransit();
-        trip.Complete();
+        trip.Advance(TripStatus.ArrivedPickup);
+        trip.Advance(TripStatus.Loaded);
+        trip.Advance(TripStatus.InTransit);
+        trip.Advance(TripStatus.ArrivedDestination);
+        trip.Advance(TripStatus.Unloaded);
+        trip.Advance(TripStatus.Completed);
         Assert.Equal(TripStatus.Completed, trip.Status);
         Assert.NotNull(trip.CompletedAtUtc);
         Assert.Contains(trip.DomainEvents, e => e is TripCompleted);
     }
 
     [Fact]
-    public void Trip_cannot_start_before_assignment()
+    public void Trip_cannot_skip_lifecycle_steps()
     {
         Trip trip = NewTrip();
-        Assert.Throws<DomainException>(trip.Start);
+        // Jumping straight from Created to InTransit is illegal — one step at a time.
+        Assert.Throws<DomainException>(() => trip.Advance(TripStatus.InTransit));
+    }
+
+    [Fact]
+    public void Trip_can_be_cancelled_before_completion()
+    {
+        Trip trip = NewTrip();
+        trip.Advance(TripStatus.DriverAccepted);
+        trip.Advance(TripStatus.Cancelled);
+        Assert.Equal(TripStatus.Cancelled, trip.Status);
     }
 
     [Fact]

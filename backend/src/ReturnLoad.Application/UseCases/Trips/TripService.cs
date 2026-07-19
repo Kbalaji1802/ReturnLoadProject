@@ -78,7 +78,10 @@ internal sealed class TripService : ITripService
             : new TripView(trip.Id, trip.CarrierId, trip.VehicleId, trip.DriverProfileId, trip.Status, trip.StartedAtUtc, trip.CompletedAtUtc);
     }
 
-    /// <summary>Drives the trip state machine toward <paramref name="target"/> one legal step at a time.</summary>
+    /// <summary>
+    /// Advances the trip one legal step toward <paramref name="target"/> (or cancels it). An
+    /// illegal transition throws <c>DomainException</c>, which the API maps to 400 (ADR-0016).
+    /// </summary>
     public async Task<Result> AdvanceAsync(Guid tripId, TripStatus target, CancellationToken cancellationToken = default)
     {
         Trip? trip = await _trips.GetByIdAsync(tripId, cancellationToken);
@@ -87,16 +90,7 @@ internal sealed class TripService : ITripService
             return Result.Failure(Error.NotFound("Trip not found."));
         }
 
-        switch (target)
-        {
-            case TripStatus.Assigned: trip.Assign(); break;
-            case TripStatus.Started: trip.Start(); break;
-            case TripStatus.InTransit: trip.MarkInTransit(); break;
-            case TripStatus.Completed: trip.Complete(); break;
-            case TripStatus.Cancelled: trip.Cancel(); break;
-            default: return Result.Failure(Error.Validation("Unsupported trip transition."));
-        }
-
+        trip.Advance(target);
         _trips.Update(trip);
         await _uow.SaveChangesAsync(cancellationToken);
         return Result.Success();

@@ -127,10 +127,14 @@ public sealed class UseCaseFlowTests : IDisposable
             11.01, 76.95, "Coimbatore", 13.08, 80.27, "Chennai", 12.9, 77.5, "Bengaluru",
             DateTimeOffset.UtcNow.AddHours(10), DateTimeOffset.UtcNow.AddHours(20)))).Value;
 
-        Assert.True((await trips.AdvanceAsync(tripId, TripStatus.Assigned)).IsSuccess);
-        Assert.True((await trips.AdvanceAsync(tripId, TripStatus.Started)).IsSuccess);
-        Assert.True((await trips.AdvanceAsync(tripId, TripStatus.InTransit)).IsSuccess);
-        Assert.True((await trips.AdvanceAsync(tripId, TripStatus.Completed)).IsSuccess);
+        foreach (TripStatus step in new[]
+        {
+            TripStatus.DriverAccepted, TripStatus.DriverEnRoute, TripStatus.ArrivedPickup, TripStatus.Loaded,
+            TripStatus.InTransit, TripStatus.ArrivedDestination, TripStatus.Unloaded, TripStatus.Completed,
+        })
+        {
+            Assert.True((await trips.AdvanceAsync(tripId, step)).IsSuccess);
+        }
 
         TripView trip = (await trips.GetAsync(tripId)).Value;
         Assert.Equal(TripStatus.Completed, trip.Status);

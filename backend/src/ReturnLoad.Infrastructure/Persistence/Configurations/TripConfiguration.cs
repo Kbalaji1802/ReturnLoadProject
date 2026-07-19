@@ -16,7 +16,8 @@ public sealed class TripConfiguration : AggregateConfiguration<Trip>
         builder.Property(t => t.CarrierId).IsRequired();
         builder.Property(t => t.VehicleId).IsRequired();
         builder.Property(t => t.DriverProfileId).IsRequired();
-        builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(16).IsRequired();
+        // 24 chars holds the longest lifecycle name ("ArrivedDestination" = 18) (M4.3 Step 5).
+        builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(24).IsRequired();
         builder.Property(t => t.CreatedAtUtc).IsRequired();
         builder.Property(t => t.StartedAtUtc);
         builder.Property(t => t.CompletedAtUtc);

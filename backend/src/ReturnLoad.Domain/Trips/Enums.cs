@@ -1,16 +1,21 @@
 namespace ReturnLoad.Domain.Trips;
 
 /// <summary>
-/// Lifecycle of a trip — a truck's planned movement including the return leg (glossary §8).
-/// Created → Assigned → Started → InTransit → Completed, with a Cancelled branch before
-/// completion.
+/// Lifecycle of a trip — the loaded journey a driver runs after a booking is accepted
+/// (M4.3 Step 5). A single linear progression with a Cancelled branch before completion:
+/// Created → DriverAccepted → DriverEnRoute → ArrivedPickup → Loaded → InTransit →
+/// ArrivedDestination → Unloaded → Completed.
 /// </summary>
 public enum TripStatus
 {
     Created = 0,
-    Assigned = 1,
-    Started = 2,
-    InTransit = 3,
-    Completed = 4,
-    Cancelled = 5,
+    DriverAccepted = 1,
+    DriverEnRoute = 2,
+    ArrivedPickup = 3,
+    Loaded = 4,
+    InTransit = 5,
+    ArrivedDestination = 6,
+    Unloaded = 7,
+    Completed = 8,
+    Cancelled = 9,
 }
