@@ -1,5 +1,5 @@
+using Microsoft.Extensions.Options;
 using ReturnLoad.Application.Abstractions.Persistence;
-using ReturnLoad.Application.UseCases.Loads;
 using ReturnLoad.Domain.Fleet;
 using ReturnLoad.Domain.Identity;
 using ReturnLoad.Domain.Loads;
@@ -8,15 +8,33 @@ using ReturnLoad.Shared.Results;
 namespace ReturnLoad.Application.UseCases.Matching;
 
 /// <summary>
-/// The MVP matching engine (<c>MATCHING_ENGINE.md</c>): given an authenticated driver, returns
-/// the posted loads their fleet can actually carry — never the whole board. Enforces the hard
-/// filters our data supports today: driver verified (7), vehicle verified (8), vehicle type ↔
-/// cargo (1) and payload capacity (2). Geo-corridor/time filters (3,4,5) arrive with PostGIS.
-/// <b>Zero matches is a valid result</b>, not an error.
+/// A posted load ranked for a driver (M5): the load fields plus its match <see cref="Score"/>
+/// (0–100), a 1–5 <see cref="Stars"/> rating, and a human-readable <see cref="Reason"/>. Flat so
+/// clients render it like a load with extra ranking fields.
+/// </summary>
+public sealed record ScoredLoadView(
+    Guid Id, Guid ShipperId, string? OriginAddress, string? DestinationAddress,
+    DateTimeOffset PickupStart, DateTimeOffset PickupEnd, CargoType CargoType,
+    decimal WeightKg, decimal? OfferedPriceInr, LoadStatus Status,
+    decimal? DistanceKm, int? EstimatedDurationMinutes,
+    int Score, int Stars, string Reason);
+
+/// <summary>
+/// The MVP matching engine (<c>MATCHING_ENGINE.md</c>): two stages. Stage 1 applies the hard
+/// filters our data supports today — driver verified (7), vehicle verified (8), vehicle type ↔
+/// cargo (1), payload capacity (2). Stage 2 (M5) <b>ranks</b> the survivors by an explainable
+/// score (pickup proximity, utilisation, haul length) and returns them best-first. Geo-corridor
+/// / time filters (3,4,5) arrive with PostGIS. <b>Zero matches is a valid result</b>, not an error.
 /// </summary>
 public interface IMatchingService
 {
-    Task<Result<IReadOnlyList<LoadView>>> FindCompatibleLoadsAsync(Guid authUserId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// The driver's compatible loads, ranked best-first. When the driver's current location
+    /// (<paramref name="driverLat"/>/<paramref name="driverLng"/>) is supplied, proximity drives
+    /// the ranking; otherwise loads are ranked by the remaining signals.
+    /// </summary>
+    Task<Result<IReadOnlyList<ScoredLoadView>>> FindCompatibleLoadsAsync(
+        Guid authUserId, double? driverLat = null, double? driverLng = null, CancellationToken cancellationToken = default);
 }
 
 internal sealed class MatchingService : IMatchingService
@@ -26,22 +44,26 @@ internal sealed class MatchingService : IMatchingService
     private readonly IRepository<Association> _associations;
     private readonly IRepository<Vehicle> _vehicles;
     private readonly IRepository<Load> _loads;
+    private readonly MatchingOptions _options;
 
     public MatchingService(
         IRepository<UserProfile> users,
         IRepository<DriverProfile> drivers,
         IRepository<Association> associations,
         IRepository<Vehicle> vehicles,
-        IRepository<Load> loads)
+        IRepository<Load> loads,
+        IOptions<MatchingOptions> options)
     {
         _users = users;
         _drivers = drivers;
         _associations = associations;
         _vehicles = vehicles;
         _loads = loads;
+        _options = options.Value;
     }
 
-    public async Task<Result<IReadOnlyList<LoadView>>> FindCompatibleLoadsAsync(Guid authUserId, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyList<ScoredLoadView>>> FindCompatibleLoadsAsync(
+        Guid authUserId, double? driverLat = null, double? driverLng = null, CancellationToken cancellationToken = default)
     {
         UserProfile? profile = (await _users.ListAsync(u => u.AuthUserId == authUserId, cancellationToken)).FirstOrDefault();
         DriverProfile? driver = profile is null
@@ -85,21 +107,40 @@ internal sealed class MatchingService : IMatchingService
 
         IReadOnlyList<Load> posted = await _loads.ListAsync(l => l.Status == LoadStatus.Posted, cancellationToken);
 
-        // Filters 1 + 2 — a load matches if ANY of the driver's verified vehicles can carry it.
-        List<LoadView> matches = posted
-            .Where(load => vehicles.Any(vehicle => MatchingRules.IsEligible(load, vehicle)))
-            .Select(Map)
+        List<ScoredLoadView> ranked = [];
+        foreach (Load load in posted)
+        {
+            // Stage 1: eligible vehicles for this load (filters 1 + 2).
+            List<Vehicle> eligible = vehicles.Where(v => MatchingRules.IsEligible(load, v)).ToList();
+            if (eligible.Count == 0)
+            {
+                continue;
+            }
+
+            // Best-fit vehicle: the smallest capacity that still carries it (highest utilisation).
+            Vehicle bestFit = eligible.OrderBy(v => v.Capacity.MaxPayload.Kilograms).First();
+
+            // Stage 2: rank.
+            MatchScore score = MatchingScorer.Score(load, bestFit.Capacity.MaxPayload.Kilograms, driverLat, driverLng, _options);
+            ranked.Add(Map(load, score));
+        }
+
+        // Best opportunities first (stable tie-break by pickup time so ordering is deterministic).
+        IReadOnlyList<ScoredLoadView> ordered = ranked
+            .OrderByDescending(s => s.Score)
+            .ThenBy(s => s.PickupStart)
             .ToList();
 
-        return Result<IReadOnlyList<LoadView>>.Success(matches);
+        return Result<IReadOnlyList<ScoredLoadView>>.Success(ordered);
     }
 
-    private static Result<IReadOnlyList<LoadView>> Empty() =>
-        Result<IReadOnlyList<LoadView>>.Success([]);
+    private static Result<IReadOnlyList<ScoredLoadView>> Empty() =>
+        Result<IReadOnlyList<ScoredLoadView>>.Success([]);
 
-    private static LoadView Map(Load l) => new(
+    private static ScoredLoadView Map(Load l, MatchScore score) => new(
         l.Id, l.ShipperId, l.Origin.Address, l.Destination.Address,
         l.PickupWindow.Start, l.PickupWindow.End, l.Requirement.CargoType,
         l.Requirement.Weight.Kilograms, l.OfferedPrice?.Amount, l.Status,
-        l.DistanceKm, l.EstimatedDurationMinutes);
+        l.DistanceKm, l.EstimatedDurationMinutes,
+        score.Score, score.Stars, score.Reason);
 }

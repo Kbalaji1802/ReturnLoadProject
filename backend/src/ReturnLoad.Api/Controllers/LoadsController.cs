@@ -48,18 +48,19 @@ public sealed class LoadsController : ControllerBase
     }
 
     /// <summary>
-    /// The posted loads the authenticated driver's fleet can actually carry — the matching
-    /// engine's compatible set, not the whole board (MATCHING_ENGINE hard filters). Zero is valid.
+    /// The posted loads the authenticated driver's fleet can carry, <b>ranked best-first</b> with
+    /// a score + reason (M5). Optional <c>lat</c>/<c>lng</c> = the driver's current location, which
+    /// makes pickup proximity drive the ranking. Zero matches is a valid result.
     /// </summary>
     [HttpGet("matched")]
-    public async Task<IActionResult> Matched(CancellationToken cancellationToken)
+    public async Task<IActionResult> Matched([FromQuery] double? lat, [FromQuery] double? lng, CancellationToken cancellationToken)
     {
         if (!HttpContext.TryGetUserId(out Guid authUserId))
         {
             return Unauthorized();
         }
 
-        var result = await _matching.FindCompatibleLoadsAsync(authUserId, cancellationToken);
+        var result = await _matching.FindCompatibleLoadsAsync(authUserId, lat, lng, cancellationToken);
         return result.ToApiResult(HttpContext);
     }
 

@@ -9,6 +9,7 @@ using ReturnLoad.Application.Abstractions.Identity;
 using ReturnLoad.Application.Abstractions.Persistence;
 using ReturnLoad.Application.Abstractions.Security;
 using ReturnLoad.Application.Abstractions.Storage;
+using ReturnLoad.Application.UseCases.Matching;
 using ReturnLoad.Infrastructure.Geo;
 using ReturnLoad.Infrastructure.Identity;
 using ReturnLoad.Infrastructure.Identity.Tokens;
@@ -68,6 +69,10 @@ public static class DependencyInjection
         services.AddSingleton<IFileStorageService, LocalDiskFileStorageService>();
 
         AddGeo(services, configuration);
+
+        // Matching ranking parameters (M5) — tunable via the "Matching" config section.
+        services.Configure<MatchingOptions>(configuration.GetSection(MatchingOptions.SectionName));
+
         AddIdentity(services, configuration);
 
         return services;
