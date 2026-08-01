@@ -22,19 +22,24 @@ public static class MatchingScorer
     /// proximity dominates; otherwise that weight is applied neutrally so ranking still works.
     /// </summary>
     public static MatchScore Score(
-        Load load, decimal vehicleCapacityKg, double? driverLat, double? driverLng, MatchingOptions options, double? partnerRating = null)
+        Load load, decimal vehicleCapacityKg, double? driverLat, double? driverLng, MatchingOptions options,
+        double? partnerRating = null, double? proximityRadiusKm = null)
     {
         ArgumentNullException.ThrowIfNull(load);
         ArgumentNullException.ThrowIfNull(options);
 
         List<string> reasons = [];
 
+        // Normalise proximity over the pickup's area radius when the caller supplies it (Part 2), so
+        // survivors of the hard radius filter still spread 0–1 across that radius; else the global max.
+        double proximityBaseKm = proximityRadiusKm is double r && r > 0 ? r : options.MaxPickupRadiusKm;
+
         // 1) Pickup proximity — the dominant signal (Madurai driver → Madurai pickup ranks top).
         double proximityFactor;
         if (driverLat is double lat && driverLng is double lng)
         {
             double km = HaversineKm(lat, lng, load.Origin.Coordinate.Latitude, load.Origin.Coordinate.Longitude);
-            proximityFactor = Clamp01(1 - (km / options.MaxPickupRadiusKm));
+            proximityFactor = Clamp01(1 - (km / proximityBaseKm));
             reasons.Add($"pickup {km:0} km away");
         }
         else

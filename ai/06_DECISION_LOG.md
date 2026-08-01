@@ -23,6 +23,68 @@
 
 ---
 
+## ADR-0020 — Workflow correction sprint: availability, radius filtering, document verification, owner-confirmation trip gates, live push
+- **Date:** 2026-08-01
+- **Status:** Accepted
+- **Context:** A full business-workflow audit (`docs/design/WORKFLOW_AUDIT_CORRECTION_SPRINT.md`) against
+  the ReturnLoad vision found the platform technically sound but with workflow deviations that make it
+  unfit for real transport operations: every driver saw every load (pickup radius was only a *ranking*
+  signal); "driver status" meant verification, not operational availability, so busy drivers still got
+  loads; admins approved documents blind (no driver/company/vehicle context, no file view, rejection
+  reasons overwritten); owners chose drivers blind; and the trip lifecycle had no owner sign-off and no
+  participant authorization (any user could drive any trip). This is a correction sprint — no new
+  milestones — prioritising operational sense over feature count.
+- **Decision:**
+  1. **Operational availability (Part 3):** new `DriverAvailability` (Available/Busy/Offline/OnLeave/
+     VehicleService), orthogonal to verification `DriverStatus`. Default **Offline** — a verified driver
+     must clock in. `Busy` is **system-managed**: set on booking acceptance, released to Available on
+     trip completion/cancel. Only `Available` **and** verified drivers are matched.
+  2. **Pickup radius as a hard filter (Part 2):** matching now *excludes* loads outside the pickup radius
+     instead of down-ranking them. Radius is resolved per **pickup area type** — Urban 5 / Suburban 10 /
+     Highway 25 km, **config-driven** (`Matching:*RadiusKm`); the shipper selects the area type when
+     posting (default Suburban). A driver with **no location gets an empty feed** (a radius cannot be
+     honoured without a position). Hard-filter order locked: Verified Driver → Verified Vehicle →
+     Available Driver → Compatible Vehicle → Pickup Radius → score.
+  3. **Document verification (Parts 1 & 8):** a **rich pending-queue DTO** joins driver name/photo,
+     company, vehicle + number, doc type/number, uploaded/expiry dates, status; a **staff file endpoint**
+     (`GET /documents/{id}/file`) backs the admin preview/download. Rejection **history is append-only**
+     — modelled as a separate `DocumentReview` aggregate (like `TrackingEvent`/`AuditLog`), never
+     overwritten, capturing decision + reason + reviewer + time (`GET /documents/{id}/history`). Reject
+     **notifies** the driver with the reason; a **re-upload archives** the prior document of that type
+     (lineage kept). Added `UserProfile.PhotoUrl` (null → initials avatar; never fabricated).
+  4. **Owner driver-selection (Part 7):** the choose-a-driver list is enriched with rating, completed
+     trips, verification, availability, and **distance/ETA to pickup** computed from the driver's new
+     **last-known location** (`DriverProfile.LastKnown*`), fed by tracking pings and by a driver sharing
+     GPS when clocking in.
+  5. **Trip owner-confirmation gates + authorization (Part 5):** two owner-confirmation states inserted —
+     `PickupConfirmed` (before Loaded) and `DeliveryConfirmed` (before Completed). **Blocking with a
+     timeout fallback:** the owner confirms, but after a configurable window (`Trips:OwnerConfirmWindow
+     Minutes`, default 15) the driver may self-advance — recorded as **auto-confirmed** so a truck is
+     never stranded on an absent owner. Every transition is now **participant-authorised**: only the
+     assigned driver runs driving steps, only the load owner runs the gates, staff may override; a
+     non-participant is rejected. New enum values are **appended** (10, 11) so numeric serialisation to
+     clients stays stable; order is defined by the lifecycle array.
+  6. **Live tracking push + ETA (Part 6):** positions are pushed over a new **SignalR `TrackingHub`**
+     (authorised subscribe, per-trip groups) so the owner/admin map marker moves without polling; the
+     Application layer stays transport-agnostic behind `ILiveTrackingNotifier` (no-op default, SignalR
+     override in the API). ETA now uses a **recent-speed window** instead of the whole-trip average, so
+     it no longer collapses to null on a brief idle.
+  7. **Latent persistence bug fixed:** `EfRepository.Update` called `DbSet.Update(entity)`, which forced
+     the whole tracked graph to `Modified` and would mark a newly-added owned-collection child `Modified`
+     (UPDATE a non-existent row → false `DbUpdateConcurrencyException`). It now relies on change tracking
+     for already-tracked aggregates and only re-attaches detached ones.
+- **Alternatives considered:** area type inferred from geo/road-class (rejected for now: needs PostGIS +
+  a road dataset we don't have — revisit); strictly-blocking owner confirmation (rejected: an absent
+  owner strands the truck) and delivery-only confirmation (rejected: loses the pickup gate); document
+  review history as an owned collection on `Document` (rejected: interacts badly with the app-managed
+  concurrency token — a separate append-only aggregate matches `TrackingEvent`/`AuditLog`).
+- **Consequences:** Matching, dispatch, verification, and the trip lifecycle now match how a real
+  logistics operation runs. Seven EF migrations (DriverAvailability, LoadPickupAreaType,
+  DocumentReviewHistoryAndDriverPhoto, DriverLastKnownLocation, TripOwnerConfirmationGates). 204 backend
+  tests green. Remaining sprint work is client-side (Angular admin grids/preview/dashboards; Flutter
+  availability UI, form resets, dashboards, doc re-upload, placeholder removal) plus the manual Flutter
+  build gate (ADR-0016 — no SDK in this environment).
+
 ## ADR-0019 — Live GPS tracking architecture (M6)
 - **Date:** 2026-07-19
 - **Status:** Accepted

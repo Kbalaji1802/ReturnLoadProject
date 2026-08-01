@@ -1,6 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { RouterLink, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -83,11 +83,12 @@ interface TripView {
             <ng-container matColumnDef="actions">
               <th mat-header-cell *matHeaderCellDef></th>
               <td mat-cell *matCellDef="let t" class="right">
-                <a mat-stroked-button [routerLink]="['/tracking', t.id]"><mat-icon>my_location</mat-icon> Track</a>
+                <a mat-stroked-button [routerLink]="['/tracking', t.id]" (click)="$event.stopPropagation()"><mat-icon>my_location</mat-icon> Track</a>
+                <mat-icon class="chev">chevron_right</mat-icon>
               </td>
             </ng-container>
             <tr mat-header-row *matHeaderRowDef="cols"></tr>
-            <tr mat-row *matRowDef="let row; columns: cols"></tr>
+            <tr mat-row *matRowDef="let row; columns: cols" class="clickable" (click)="open(row.id)"></tr>
           </table>
           <mat-paginator [length]="filtered().length" [pageSize]="pageSize()"
             [pageSizeOptions]="[5, 10, 25]" (page)="onPage($event)" showFirstLastButtons />
@@ -95,10 +96,16 @@ interface TripView {
       </div>
     </div>
   `,
-  styles: [`.search { min-width: 300px; } .mono { font-family: ui-monospace, monospace; font-size: 0.8rem; color: var(--mat-sys-on-surface-variant); } .right { text-align: right; white-space: nowrap; }`],
+  styles: [`
+    .search { min-width: 300px; } .mono { font-family: ui-monospace, monospace; font-size: 0.8rem; color: var(--mat-sys-on-surface-variant); }
+    .right { text-align: right; white-space: nowrap; }
+    .chev { vertical-align: middle; color: var(--mat-sys-on-surface-variant); margin-left: 4px; }
+    tr.clickable { cursor: pointer; } tr.clickable:hover td { background: var(--mat-sys-surface-container-high); }
+  `],
 })
 export class Trips {
   private readonly api = inject(ApiService);
+  private readonly router = inject(Router);
   protected readonly cols = ['id', 'status', 'driver', 'vehicle', 'started', 'actions'];
   protected readonly statuses = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
@@ -128,6 +135,7 @@ export class Trips {
   }
 
   protected tripStatus = (v: number) => label(TRIP_STATUS, v);
+  protected open(id: string) { this.router.navigate(['/trips', id]); }
   protected onQuery(v: string) { this.query.set(v); this.pageIndex.set(0); }
   protected onStatus(v: number) { this.statusFilter.set(v); this.pageIndex.set(0); }
   protected onPage(e: PageEvent) { this.pageIndex.set(e.pageIndex); this.pageSize.set(e.pageSize); }

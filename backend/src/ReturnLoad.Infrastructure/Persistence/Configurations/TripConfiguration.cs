@@ -23,6 +23,9 @@ public sealed class TripConfiguration : AggregateConfiguration<Trip>
         builder.Property(t => t.CreatedAtUtc).IsRequired();
         builder.Property(t => t.StartedAtUtc);
         builder.Property(t => t.CompletedAtUtc);
+        builder.Property(t => t.StatusChangedAtUtc).IsRequired();
+        builder.Property(t => t.PickupAutoConfirmed).IsRequired();
+        builder.Property(t => t.DeliveryAutoConfirmed).IsRequired();
 
         builder.OwnsOne(t => t.Origin, o => OwnedConfig.Location(o, "Origin"));
         builder.OwnsOne(t => t.Destination, d => OwnedConfig.Location(d, "Destination"));

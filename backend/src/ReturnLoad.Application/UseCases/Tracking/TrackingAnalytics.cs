@@ -73,6 +73,32 @@ public static class TrackingAnalytics
             orderedPoints.Count);
     }
 
+    /// <summary>
+    /// A robust "current" speed (kph) for ETA (Part 6): the average of the most recent points'
+    /// reported device speeds (last <paramref name="window"/>), ignoring idle/zero readings; falls
+    /// back to the overall travel average. Avoids ETA collapsing to null when the trip is briefly
+    /// idle (e.g. stopped at the start), which the whole-trip average did.
+    /// </summary>
+    public static double RecentSpeedKph(IReadOnlyList<TrackingEvent> orderedPoints, int window = 5)
+    {
+        ArgumentNullException.ThrowIfNull(orderedPoints);
+        if (orderedPoints.Count == 0)
+        {
+            return 0;
+        }
+
+        List<double> recentMoving = orderedPoints
+            .Skip(Math.Max(0, orderedPoints.Count - window))
+            .Select(p => p.Point.SpeedKph)
+            .Where(s => s is double v && v > IdleSpeedThresholdKph)
+            .Select(s => s!.Value)
+            .ToList();
+
+        return recentMoving.Count > 0
+            ? Math.Round(recentMoving.Average(), 1)
+            : Summarize(orderedPoints).AvgSpeedKph;
+    }
+
     public static double HaversineKm(double lat1, double lng1, double lat2, double lng2)
     {
         double dLat = ToRad(lat2 - lat1);

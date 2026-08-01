@@ -23,6 +23,30 @@ public enum DriverStatus
     Blocked = 3,
 }
 
+/// <summary>
+/// A driver's <b>operational availability</b> to receive new loads — orthogonal to
+/// <see cref="DriverStatus"/> (verification/moderation). Only an <see cref="Available"/> driver is
+/// matched (MATCHING_ENGINE.md §2 filter 6, correction-sprint Part 3). <see cref="Busy"/> is
+/// system-managed (set while the driver is on an active trip); the other states are driver-chosen.
+/// </summary>
+public enum DriverAvailability
+{
+    /// <summary>Ready to receive loads — the only state the matching engine surfaces loads to.</summary>
+    Available = 0,
+
+    /// <summary>On an active trip. System-managed; a busy driver never receives new loads.</summary>
+    Busy = 1,
+
+    /// <summary>Clocked out / app-idle. Not matched. Driver-chosen.</summary>
+    Offline = 2,
+
+    /// <summary>Away for a period (personal leave). Not matched. Driver-chosen.</summary>
+    OnLeave = 3,
+
+    /// <summary>Vehicle undergoing service/maintenance. Not matched. Driver-chosen.</summary>
+    VehicleService = 4,
+}
+
 /// <summary>Lifecycle of a carrier organisation.</summary>
 public enum CarrierStatus
 {

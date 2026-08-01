@@ -23,6 +23,16 @@ public sealed class LoadsAndTripsTests
             Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Chennai(), Coimbatore(),
             ReturnLeg.Create(Coimbatore(), Chennai(), TimeWindow.Create(Now.AddHours(8), Now.AddHours(16))));
 
+    private static readonly TimeSpan ConfirmWindow = TimeSpan.FromMinutes(15);
+
+    /// <summary>Advance as the driver at a fixed time (drives the driving/physical steps).</summary>
+    private static void Drive(Trip trip, TripStatus target) =>
+        trip.Advance(target, TripActor.Driver, DateTimeOffset.UtcNow, ConfirmWindow);
+
+    /// <summary>Advance as the load owner (confirms a gate).</summary>
+    private static void OwnerConfirm(Trip trip, TripStatus target) =>
+        trip.Advance(target, TripActor.Owner, DateTimeOffset.UtcNow, ConfirmWindow);
+
     [Fact]
     public void Load_create_raises_event_and_starts_draft()
     {
@@ -55,24 +65,57 @@ public sealed class LoadsAndTripsTests
     }
 
     [Fact]
-    public void Trip_advances_through_the_lifecycle_stamping_start_and_completion()
+    public void Trip_advances_through_the_lifecycle_with_owner_confirmation_gates()
     {
         Trip trip = NewTrip();
-        trip.Advance(TripStatus.DriverAccepted);
-        trip.Advance(TripStatus.DriverEnRoute);
+        Drive(trip, TripStatus.DriverAccepted);
+        Drive(trip, TripStatus.DriverEnRoute);
         Assert.Equal(TripStatus.DriverEnRoute, trip.Status);
         Assert.NotNull(trip.StartedAtUtc);
         Assert.Contains(trip.DomainEvents, e => e is TripStarted);
 
-        trip.Advance(TripStatus.ArrivedPickup);
-        trip.Advance(TripStatus.Loaded);
-        trip.Advance(TripStatus.InTransit);
-        trip.Advance(TripStatus.ArrivedDestination);
-        trip.Advance(TripStatus.Unloaded);
-        trip.Advance(TripStatus.Completed);
+        Drive(trip, TripStatus.ArrivedPickup);
+        OwnerConfirm(trip, TripStatus.PickupConfirmed); // owner gate before loading
+        Drive(trip, TripStatus.Loaded);
+        Drive(trip, TripStatus.InTransit);
+        Drive(trip, TripStatus.ArrivedDestination);
+        Drive(trip, TripStatus.Unloaded);
+        OwnerConfirm(trip, TripStatus.DeliveryConfirmed); // owner gate before completion
+        Drive(trip, TripStatus.Completed);
+
         Assert.Equal(TripStatus.Completed, trip.Status);
         Assert.NotNull(trip.CompletedAtUtc);
+        Assert.False(trip.PickupAutoConfirmed);   // the owner confirmed, not a timeout
+        Assert.False(trip.DeliveryAutoConfirmed);
         Assert.Contains(trip.DomainEvents, e => e is TripCompleted);
+    }
+
+    [Fact]
+    public void Owner_confirmation_gate_blocks_the_driver_until_the_window_elapses()
+    {
+        Trip trip = NewTrip();
+        Drive(trip, TripStatus.DriverAccepted);
+        Drive(trip, TripStatus.DriverEnRoute);
+        DateTimeOffset arrival = new(2026, 8, 1, 9, 0, 0, TimeSpan.Zero);
+        trip.Advance(TripStatus.ArrivedPickup, TripActor.Driver, arrival, ConfirmWindow);
+
+        // The driver cannot self-confirm the owner gate immediately.
+        Assert.Throws<DomainException>(() =>
+            trip.Advance(TripStatus.PickupConfirmed, TripActor.Driver, arrival.AddMinutes(5), ConfirmWindow));
+
+        // After the window elapses the driver may proceed — recorded as auto-confirmed (no stranding).
+        trip.Advance(TripStatus.PickupConfirmed, TripActor.Driver, arrival.AddMinutes(20), ConfirmWindow);
+        Assert.Equal(TripStatus.PickupConfirmed, trip.Status);
+        Assert.True(trip.PickupAutoConfirmed);
+    }
+
+    [Fact]
+    public void Owner_cannot_advance_a_driving_step()
+    {
+        Trip trip = NewTrip();
+        // A driving step (DriverAccepted) may not be advanced by the owner.
+        Assert.Throws<DomainException>(() =>
+            trip.Advance(TripStatus.DriverAccepted, TripActor.Owner, DateTimeOffset.UtcNow, ConfirmWindow));
     }
 
     [Fact]
@@ -80,15 +123,15 @@ public sealed class LoadsAndTripsTests
     {
         Trip trip = NewTrip();
         // Jumping straight from Created to InTransit is illegal — one step at a time.
-        Assert.Throws<DomainException>(() => trip.Advance(TripStatus.InTransit));
+        Assert.Throws<DomainException>(() => Drive(trip, TripStatus.InTransit));
     }
 
     [Fact]
     public void Trip_can_be_cancelled_before_completion()
     {
         Trip trip = NewTrip();
-        trip.Advance(TripStatus.DriverAccepted);
-        trip.Advance(TripStatus.Cancelled);
+        Drive(trip, TripStatus.DriverAccepted);
+        Drive(trip, TripStatus.Cancelled);
         Assert.Equal(TripStatus.Cancelled, trip.Status);
     }
 

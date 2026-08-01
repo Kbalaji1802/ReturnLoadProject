@@ -93,17 +93,28 @@ class _TripsTabState extends ConsumerState<TripsTab> {
     try {
       await ref.read(dioProvider).post<dynamic>('trips/$tripId/status/$target');
       await _load();
-    } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('That action is not allowed right now.')));
+    } on DioException catch (e) {
+      // Surface the backend's reason (e.g. "Waiting for the load owner to confirm…").
+      final msg = _apiMessage(e) ?? 'That action is not allowed right now.';
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  bool _isActive(Map<String, dynamic> t) {
-    final s = t['status'] as int? ?? 0;
-    return s < 8; // not Completed(8) / Cancelled(9)
+  String? _apiMessage(DioException e) {
+    final data = e.response?.data;
+    if (data is Map) {
+      final errors = data['errors'];
+      if (errors is List && errors.isNotEmpty) {
+        return errors.first['message']?.toString();
+      }
+      if (data['message'] is String) return data['message'] as String;
+    }
+    return null;
   }
+
+  bool _isActive(Map<String, dynamic> t) => tripIsActive(t['status']);
 
   @override
   Widget build(BuildContext context) {
@@ -146,7 +157,8 @@ class _TripsTabState extends ConsumerState<TripsTab> {
   Widget _activeTrip(Map<String, dynamic> t) {
     final tripId = t['id'] as String;
     final status = t['status'] as int? ?? 0;
-    final next = nextTripAction(status);
+    final next = nextTripStatus(status);
+    final nextIsOwnerGate = next != null && ownerConfirmStatuses.contains(next);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -175,9 +187,14 @@ class _TripsTabState extends ConsumerState<TripsTab> {
             // Return Availability (Tamil Nadu differentiator): ask near the destination.
             if (status >= 5 && status < 8) _returnAvailability(t),
             const SizedBox(height: 8),
-            if (next != null)
+            if (next != null && nextIsOwnerGate)
+              // Owner-confirmation gate: the load owner confirms in their app. The driver may
+              // proceed only after the confirmation window elapses (the backend enforces it and
+              // returns a "waiting for the owner" message until then — surfaced via the snackbar).
+              _ownerGate(tripId, next)
+            else if (next != null)
               FilledButton(
-                onPressed: _busy ? null : () => _advance(tripId, next),
+                onPressed: _busy ? null : () => _advance(tripId, tripStatusName[next] ?? ''),
                 child: Text(tripActionLabel[next] ?? 'Next'),
               ),
             const SizedBox(height: 8),
@@ -227,33 +244,63 @@ class _TripsTabState extends ConsumerState<TripsTab> {
   void _return(String message) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 
-  /// Vertical lifecycle timeline; steps up to and including the current status are done.
+  /// A note + "Proceed anyway" for an owner-confirmation gate on the driver's side (Part 5).
+  Widget _ownerGate(String tripId, int gateStatus) {
+    final label = gateStatus == 10 ? 'pickup' : 'delivery';
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: AppColors.warning.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(14)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.hourglass_top, size: 18, color: AppColors.warning),
+          const SizedBox(width: 8),
+          Expanded(child: Text('Waiting for the load owner to confirm $label', style: const TextStyle(fontWeight: FontWeight.w600))),
+        ]),
+        const SizedBox(height: 6),
+        Text('If they are unavailable, you can proceed once the confirmation window passes.',
+            style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 10),
+        OutlinedButton(
+          onPressed: _busy ? null : () => _advance(tripId, tripStatusName[gateStatus] ?? ''),
+          child: Text('Proceed with $label'),
+        ),
+      ]),
+    );
+  }
+
+  /// Vertical lifecycle timeline in true order; steps up to and including the current one are done.
   Widget _timeline(int status) {
+    final currentPos = tripLifecyclePosition(status);
     return Column(
       children: [
-        for (int i = 0; i < tripLifecycle.length; i++)
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Column(children: [
-              Icon(
-                i <= status ? Icons.check_circle : Icons.radio_button_unchecked,
-                size: 20,
-                color: i <= status ? AppColors.success : Theme.of(context).colorScheme.outline,
-              ),
-              if (i < tripLifecycle.length - 1)
-                Container(width: 2, height: 18, color: i < status ? AppColors.success : Theme.of(context).colorScheme.outlineVariant),
-            ]),
-            const SizedBox(width: 12),
-            Padding(
-              padding: const EdgeInsets.only(top: 1),
-              child: Text(
-                tripStatus[i] ?? '',
-                style: TextStyle(
-                  fontWeight: i == status ? FontWeight.w700 : FontWeight.w400,
-                  color: i <= status ? null : Theme.of(context).colorScheme.onSurfaceVariant,
+        for (int pos = 0; pos < tripLifecycleOrder.length; pos++)
+          Builder(builder: (context) {
+            final stepStatus = tripLifecycleOrder[pos];
+            final done = currentPos >= 0 && pos <= currentPos;
+            final isCurrent = pos == currentPos;
+            return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Column(children: [
+                Icon(
+                  done ? Icons.check_circle : Icons.radio_button_unchecked,
+                  size: 20,
+                  color: done ? AppColors.success : Theme.of(context).colorScheme.outline,
+                ),
+                if (pos < tripLifecycleOrder.length - 1)
+                  Container(width: 2, height: 18, color: (currentPos >= 0 && pos < currentPos) ? AppColors.success : Theme.of(context).colorScheme.outlineVariant),
+              ]),
+              const SizedBox(width: 12),
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Text(
+                  tripStatus[stepStatus] ?? '',
+                  style: TextStyle(
+                    fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400,
+                    color: done ? null : Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
-            ),
-          ]),
+            ]);
+          }),
       ],
     );
   }

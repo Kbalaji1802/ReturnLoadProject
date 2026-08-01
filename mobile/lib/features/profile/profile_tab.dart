@@ -3,21 +3,56 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/app_providers.dart';
+import '../../core/enums.dart';
 import '../../services/auth_repository.dart';
+import '../../services/dio_client.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/status_pill.dart';
 
-class ProfileTab extends ConsumerWidget {
+class ProfileTab extends ConsumerStatefulWidget {
   const ProfileTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileTab> createState() => _ProfileTabState();
+}
+
+class _ProfileTabState extends ConsumerState<ProfileTab> {
+  int? _status;        // driver verification status (null = no driver profile / owner)
+  double? _rating;     // null when no reviews
+  int _ratingCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    final dio = ref.read(dioProvider);
+    try {
+      final me = await dio.get<dynamic>('drivers/me');
+      final driver = me.data['data'] as Map<String, dynamic>;
+      if (mounted) setState(() => _status = (driver['status'] as num?)?.toInt());
+      final upid = driver['userProfileId'];
+      if (upid != null) {
+        final r = await dio.get<dynamic>('reviews/summary/$upid');
+        final data = r.data['data'] as Map<String, dynamic>;
+        final count = (data['count'] as num?)?.toInt() ?? 0;
+        if (mounted) setState(() { _ratingCount = count; _rating = count > 0 ? (data['average'] as num?)?.toDouble() : null; });
+      }
+    } catch (_) {/* not a driver, or offline — show what we have */}
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final email = ref.watch(currentEmailProvider) ?? 'driver@returnload.test';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
-      body: ListView(
+      body: RefreshIndicator(
+        onRefresh: _fetch,
+        child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Card(
@@ -32,10 +67,15 @@ class ProfileTab extends ConsumerWidget {
                     Text(email, style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant), overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 8),
                     Row(children: [
-                      const StatusPill('Verified'),
+                      // Real verification status + rating — no hardcoded "Verified"/4.8.
+                      StatusPill(_status == null ? 'Not a driver' : (driverStatus[_status!] ?? '—')),
                       const SizedBox(width: 8),
-                      const Icon(Icons.star, color: AppColors.warning, size: 18),
-                      Text(' 4.8', style: text.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                      if (_rating != null) ...[
+                        const Icon(Icons.star, color: AppColors.warning, size: 18),
+                        Text(' ${_rating!.toStringAsFixed(1)}', style: text.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                        Text(' ($_ratingCount)', style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                      ] else
+                        Text('No ratings yet', style: text.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                     ]),
                   ]),
                 ),
@@ -66,6 +106,7 @@ class ProfileTab extends ConsumerWidget {
             label: const Text('Logout', style: TextStyle(color: AppColors.error)),
           ),
         ],
+        ),
       ),
     );
   }

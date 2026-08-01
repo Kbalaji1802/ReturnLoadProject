@@ -24,6 +24,10 @@ public sealed class DriverProfileConfiguration : AggregateConfiguration<DriverPr
 
         builder.Property(d => d.UserProfileId).IsRequired();
         builder.Property(d => d.Status).HasConversion<string>().HasMaxLength(16);
+        builder.Property(d => d.Availability).HasConversion<string>().HasMaxLength(16).IsRequired();
+        builder.Property(d => d.LastKnownLatitude);
+        builder.Property(d => d.LastKnownLongitude);
+        builder.Property(d => d.LastLocationAtUtc);
         builder.Property(d => d.CreatedAtUtc).IsRequired();
 
         builder.Property(d => d.Licence)
@@ -41,5 +45,6 @@ public sealed class DriverProfileConfiguration : AggregateConfiguration<DriverPr
         builder.HasIndex(d => d.UserProfileId);
         builder.HasIndex(d => d.Licence).IsUnique();
         builder.HasIndex(d => d.Status);
+        builder.HasIndex(d => d.Availability);
     }
 }

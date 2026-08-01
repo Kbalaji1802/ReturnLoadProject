@@ -63,6 +63,15 @@ public sealed class VehiclesController : ControllerBase
         return result.ToApiResult(HttpContext);
     }
 
+    /// <summary>A vehicle with its owner/company resolved, for the admin vehicle-details page. Staff-only.</summary>
+    [HttpGet("{id:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.InternalStaff)]
+    public async Task<IActionResult> Detail(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _vehicles.GetDetailAsync(id, cancellationToken);
+        return result.ToApiResult(HttpContext);
+    }
+
     /// <summary>Ops approves a vehicle for matching once its mandatory documents are verified.</summary>
     [HttpPost("{id:guid}/activate")]
     [Authorize(Policy = AuthorizationPolicies.InternalStaff)]

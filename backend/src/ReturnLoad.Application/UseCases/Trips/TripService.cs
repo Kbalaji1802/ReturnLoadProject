@@ -1,5 +1,6 @@
 using ReturnLoad.Application.Abstractions.Persistence;
 using ReturnLoad.Application.UseCases.Notifications;
+using ReturnLoad.Domain.Fleet;
 using ReturnLoad.Domain.Identity;
 using ReturnLoad.Domain.Loads;
 using ReturnLoad.Domain.Trips;
@@ -20,6 +21,18 @@ public sealed record TripView(
     DateTimeOffset? StartedAtUtc, DateTimeOffset? CompletedAtUtc,
     double OriginLat, double OriginLng, double DestinationLat, double DestinationLng);
 
+/// <summary>
+/// An enriched trip for the admin trip-details page (Part 11): the trip fields plus resolved driver
+/// name, vehicle registration, and load addresses, and the confirmation-gate flags. Live location /
+/// ETA / tracking history / reviews are fetched via their own endpoints.
+/// </summary>
+public sealed record TripDetailView(
+    Guid Id, TripStatus Status, DateTimeOffset? StartedAtUtc, DateTimeOffset? CompletedAtUtc,
+    DateTimeOffset StatusChangedAtUtc, bool PickupAutoConfirmed, bool DeliveryAutoConfirmed,
+    Guid DriverProfileId, string? DriverName, Guid VehicleId, string? VehicleRegistration,
+    Guid? LoadId, string? OriginAddress, string? DestinationAddress,
+    double OriginLat, double OriginLng, double DestinationLat, double DestinationLng);
+
 public interface ITripService
 {
     Task<Result<Guid>> CreateAsync(CreateTripRequest request, CancellationToken cancellationToken = default);
@@ -35,7 +48,16 @@ public interface ITripService
     /// <summary>The trip fulfilling a load — for the load owner to track it (M6). Staff or owner.</summary>
     Task<Result<TripView>> GetForLoadAsync(Guid authUserId, Guid loadId, bool privileged, CancellationToken cancellationToken = default);
 
-    Task<Result> AdvanceAsync(Guid tripId, TripStatus target, CancellationToken cancellationToken = default);
+    /// <summary>An enriched trip for the admin trip-details page (Part 11). Staff-only.</summary>
+    Task<Result<TripDetailView>> GetDetailAsync(Guid tripId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Advances a trip one legal step (Part 5). The caller is authorised against the trip: only the
+    /// assigned driver may advance driving steps and only the load owner may confirm the pickup/
+    /// delivery gates (the driver may self-advance a gate after the configured wait); staff may
+    /// override. A non-participant is rejected.
+    /// </summary>
+    Task<Result> AdvanceAsync(Guid authUserId, Guid tripId, TripStatus target, bool privileged, CancellationToken cancellationToken = default);
 }
 
 internal sealed class TripService : ITripService
@@ -43,23 +65,29 @@ internal sealed class TripService : ITripService
     private readonly IRepository<Trip> _trips;
     private readonly IRepository<UserProfile> _users;
     private readonly IRepository<DriverProfile> _drivers;
+    private readonly IRepository<Vehicle> _vehicles;
     private readonly IRepository<Load> _loads;
     private readonly INotificationService _notify;
+    private readonly TripOptions _options;
     private readonly IUnitOfWork _uow;
 
     public TripService(
         IRepository<Trip> trips,
         IRepository<UserProfile> users,
         IRepository<DriverProfile> drivers,
+        IRepository<Vehicle> vehicles,
         IRepository<Load> loads,
         INotificationService notify,
+        Microsoft.Extensions.Options.IOptions<TripOptions> options,
         IUnitOfWork uow)
     {
         _trips = trips;
         _users = users;
         _drivers = drivers;
+        _vehicles = vehicles;
         _loads = loads;
         _notify = notify;
+        _options = options.Value;
         _uow = uow;
     }
 
@@ -132,16 +160,39 @@ internal sealed class TripService : ITripService
         return MapView(trip);
     }
 
+    public async Task<Result<TripDetailView>> GetDetailAsync(Guid tripId, CancellationToken cancellationToken = default)
+    {
+        Trip? trip = await _trips.GetByIdAsync(tripId, cancellationToken);
+        if (trip is null)
+        {
+            return Error.NotFound("Trip not found.");
+        }
+
+        DriverProfile? driver = await _drivers.GetByIdAsync(trip.DriverProfileId, cancellationToken);
+        string? driverName = driver is null ? null : (await _users.GetByIdAsync(driver.UserProfileId, cancellationToken))?.FullName;
+        string? vehicleReg = (await _vehicles.GetByIdAsync(trip.VehicleId, cancellationToken))?.Registration.Value;
+        Load? load = trip.LoadId is Guid lid ? await _loads.GetByIdAsync(lid, cancellationToken) : null;
+
+        return new TripDetailView(
+            trip.Id, trip.Status, trip.StartedAtUtc, trip.CompletedAtUtc,
+            trip.StatusChangedAtUtc, trip.PickupAutoConfirmed, trip.DeliveryAutoConfirmed,
+            trip.DriverProfileId, driverName, trip.VehicleId, vehicleReg,
+            trip.LoadId, load?.Origin.Address, load?.Destination.Address,
+            trip.Origin.Coordinate.Latitude, trip.Origin.Coordinate.Longitude,
+            trip.Destination.Coordinate.Latitude, trip.Destination.Coordinate.Longitude);
+    }
+
     private static TripView MapView(Trip trip) =>
         new(trip.Id, trip.CarrierId, trip.VehicleId, trip.DriverProfileId, trip.Status, trip.StartedAtUtc, trip.CompletedAtUtc,
             trip.Origin.Coordinate.Latitude, trip.Origin.Coordinate.Longitude,
             trip.Destination.Coordinate.Latitude, trip.Destination.Coordinate.Longitude);
 
     /// <summary>
-    /// Advances the trip one legal step toward <paramref name="target"/> (or cancels it). An
-    /// illegal transition throws <c>DomainException</c>, which the API maps to 400 (ADR-0016).
+    /// Advances the trip one legal step toward <paramref name="target"/> (or cancels it), authorising
+    /// the caller against the trip (Part 5). An illegal transition or a participant violation throws
+    /// <c>DomainException</c> / returns a failure, which the API maps to 400/403 (ADR-0016).
     /// </summary>
-    public async Task<Result> AdvanceAsync(Guid tripId, TripStatus target, CancellationToken cancellationToken = default)
+    public async Task<Result> AdvanceAsync(Guid authUserId, Guid tripId, TripStatus target, bool privileged, CancellationToken cancellationToken = default)
     {
         Trip? trip = await _trips.GetByIdAsync(tripId, cancellationToken);
         if (trip is null)
@@ -149,23 +200,80 @@ internal sealed class TripService : ITripService
             return Result.Failure(Error.NotFound("Trip not found."));
         }
 
-        trip.Advance(target);
+        Load? load = trip.LoadId is Guid lid ? await _loads.GetByIdAsync(lid, cancellationToken) : null;
+
+        Result<TripActor> actorResult = await ResolveActorAsync(authUserId, trip, load, privileged, cancellationToken);
+        if (actorResult.IsFailure)
+        {
+            return Result.Failure(actorResult.Error);
+        }
+
+        trip.Advance(target, actorResult.Value, DateTimeOffset.UtcNow, _options.OwnerConfirmWindow);
         _trips.Update(trip);
 
-        // Notify the load owner at the milestones they care about.
-        if (trip.LoadId is Guid loadId && target is TripStatus.DriverEnRoute or TripStatus.Completed)
+        // Release the driver back to Available once the trip ends, so they can be matched again
+        // (Part 3 — the counterpart to MarkBusy on booking acceptance).
+        if (target is TripStatus.Completed or TripStatus.Cancelled)
         {
-            Load? load = await _loads.GetByIdAsync(loadId, cancellationToken);
-            if (load is not null)
+            DriverProfile? driver = await _drivers.GetByIdAsync(trip.DriverProfileId, cancellationToken);
+            if (driver is not null)
             {
-                string message = target == TripStatus.Completed
-                    ? "Your load has been delivered — the trip is complete."
-                    : "Your driver has started the trip.";
-                await _notify.NotifyUserAsync(load.ShipperId, target == TripStatus.Completed ? "Trip completed" : "Trip started", message, cancellationToken);
+                driver.ReleaseFromTrip();
+                _drivers.Update(driver);
+            }
+        }
+
+        // Notify the load owner at the milestones they care about — including the two confirmation
+        // gates they must action (Part 5), so the truck is not left waiting silently.
+        if (load is not null)
+        {
+            (string? subject, string? message) = target switch
+            {
+                TripStatus.DriverEnRoute => ("Trip started", "Your driver has started the trip."),
+                TripStatus.ArrivedPickup => ("Confirm pickup", "Your driver has arrived at pickup. Please confirm to authorise loading."),
+                TripStatus.Unloaded => ("Confirm delivery", "Your load has been unloaded at the destination. Please confirm delivery."),
+                TripStatus.Completed => ("Trip completed", "Your load has been delivered — the trip is complete."),
+                _ => (null, null),
+            };
+            if (subject is not null)
+            {
+                await _notify.NotifyUserAsync(load.ShipperId, subject, message!, cancellationToken);
             }
         }
 
         await _uow.SaveChangesAsync(cancellationToken);
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Resolves how the caller relates to the trip (Part 5): the assigned driver, the load owner,
+    /// privileged staff, or — if none — a non-participant who may not touch the trip.
+    /// </summary>
+    private async Task<Result<TripActor>> ResolveActorAsync(
+        Guid authUserId, Trip trip, Load? load, bool privileged, CancellationToken cancellationToken)
+    {
+        if (privileged)
+        {
+            return TripActor.Staff;
+        }
+
+        UserProfile? profile = (await _users.ListAsync(u => u.AuthUserId == authUserId, cancellationToken)).FirstOrDefault();
+        if (profile is null)
+        {
+            return Error.Unauthorized("You are not a participant on this trip.");
+        }
+
+        DriverProfile? driver = await _drivers.GetByIdAsync(trip.DriverProfileId, cancellationToken);
+        if (driver is not null && driver.UserProfileId == profile.Id)
+        {
+            return TripActor.Driver;
+        }
+
+        if (load is not null && load.ShipperId == profile.Id)
+        {
+            return TripActor.Owner;
+        }
+
+        return Error.Unauthorized("You are not a participant on this trip.");
     }
 }

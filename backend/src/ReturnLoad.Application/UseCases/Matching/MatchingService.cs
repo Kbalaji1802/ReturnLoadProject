@@ -79,9 +79,19 @@ internal sealed class MatchingService : IMatchingService
             return Error.Validation("Register as a driver to see matching loads.");
         }
 
-        // Filter 7 — an unverified driver is eligible for nothing (Trust & Safety §1). Not an
+        // Hard-filter order (correction-sprint Part 2): (1) Verified Driver → (2) Verified Vehicle →
+        // (3) Available Driver → (4) Compatible Vehicle → (5) Pickup Radius → then score.
+
+        // Filter 1 — an unverified driver is eligible for nothing (Trust & Safety §1). Not an
         // error: "no matches yet" until verification completes.
         if (driver.Status != DriverStatus.Active)
+        {
+            return Empty();
+        }
+
+        // Filter 3 — only an Available driver receives loads (Part 3). Busy/Offline/OnLeave/
+        // VehicleService drivers get nothing; a status change takes effect on this next query.
+        if (driver.Availability != DriverAvailability.Available)
         {
             return Empty();
         }
@@ -109,15 +119,33 @@ internal sealed class MatchingService : IMatchingService
             return Empty();
         }
 
+        // Filter 5 (Pickup Radius) needs the driver's current location. Without it we cannot say a
+        // load is within range, so — per the requirement that drivers see only loads inside the
+        // pickup radius — nothing qualifies. The client should share GPS (ADR-0019) to get matches.
+        if (driverLat is not double dLat || driverLng is not double dLng)
+        {
+            return Empty();
+        }
+
         IReadOnlyList<Load> posted = await _loads.ListAsync(l => l.Status == LoadStatus.Posted, cancellationToken);
 
         Dictionary<Guid, double> shipperRatings = [];
         List<ScoredLoadView> ranked = [];
         foreach (Load load in posted)
         {
-            // Stage 1: eligible vehicles for this load (filters 1 + 2).
+            // Filter 4 — eligible vehicles for this load (vehicle type ↔ cargo + payload capacity).
             List<Vehicle> eligible = vehicles.Where(v => MatchingRules.IsEligible(load, v)).ToList();
             if (eligible.Count == 0)
+            {
+                continue;
+            }
+
+            // Filter 5 — Pickup Radius (Part 2). The load's area type sets the radius (Urban 5 /
+            // Suburban 10 / Highway 25 km, all config). A driver beyond it is EXCLUDED, not ranked.
+            double radiusKm = _options.ResolvePickupRadiusKm(load.PickupAreaType);
+            double pickupDistanceKm = MatchingScorer.HaversineKm(
+                dLat, dLng, load.Origin.Coordinate.Latitude, load.Origin.Coordinate.Longitude);
+            if (pickupDistanceKm > radiusKm)
             {
                 continue;
             }
@@ -133,10 +161,10 @@ internal sealed class MatchingService : IMatchingService
                 shipperRatings[load.ShipperId] = rating;
             }
 
-            // Stage 2: rank.
+            // Stage 2: rank the survivors, normalising proximity over this load's pickup radius.
             MatchScore score = MatchingScorer.Score(
                 load, bestFit.Capacity.MaxPayload.Kilograms, driverLat, driverLng, _options,
-                rating > 0 ? rating : null);
+                rating > 0 ? rating : null, proximityRadiusKm: radiusKm);
             ranked.Add(Map(load, score));
         }
 

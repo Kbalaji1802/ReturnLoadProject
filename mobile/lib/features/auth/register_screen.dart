@@ -43,7 +43,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             _phone.text.trim().isEmpty ? null : _phone.text.trim(),
             _accountType,
           );
-      if (mounted) context.go('/home');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account created — welcome to ReturnLoad!')));
+        context.go('/home');
+      }
     } on DioException catch (e) {
       setState(() {
         final data = e.response?.data;

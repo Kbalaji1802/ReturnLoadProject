@@ -41,6 +41,7 @@ public sealed class ApplicationDbContext
     public DbSet<Association> Associations => Set<Association>();
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
     public DbSet<Document> Documents => Set<Document>();
+    public DbSet<DocumentReview> DocumentReviews => Set<DocumentReview>();
     public DbSet<Load> Loads => Set<Load>();
     public DbSet<BookingRequest> BookingRequests => Set<BookingRequest>();
     public DbSet<Trip> Trips => Set<Trip>();

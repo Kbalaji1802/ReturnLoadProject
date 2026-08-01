@@ -35,6 +35,17 @@ export class AuthService {
   /** A concise display label for the account (highest-privilege role, else email). */
   readonly displayRole = computed(() => this.roles()[0] ?? 'Account');
 
+  /** Internal staff (mirrors backend InternalStaff policy) — may view the ops console. */
+  readonly isInternalStaff = computed(() =>
+    this.roles().some((r) => ['PlatformAdmin', 'Operations', 'Finance', 'Support'].includes(r)),
+  );
+
+  /** May approve/reject documents (mirrors backend CanVerifyDocuments = Operations). */
+  readonly canVerifyDocuments = computed(() => this.hasRole('Operations'));
+
+  /** May approve/activate vehicles + act on the fleet (mirrors backend InternalStaff on those endpoints). */
+  readonly canManageFleet = computed(() => this.isInternalStaff());
+
   hasRole(role: string): boolean {
     return this.roles().includes(role);
   }

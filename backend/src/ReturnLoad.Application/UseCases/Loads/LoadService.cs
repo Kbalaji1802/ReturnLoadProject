@@ -11,13 +11,14 @@ public sealed record PostLoadRequest(
     double OriginLat, double OriginLng, string? OriginAddress,
     double DestinationLat, double DestinationLng, string? DestinationAddress,
     DateTimeOffset PickupStart, DateTimeOffset PickupEnd,
-    CargoType CargoType, decimal WeightKg, decimal? OfferedPriceInr);
+    CargoType CargoType, decimal WeightKg, decimal? OfferedPriceInr,
+    AreaType PickupAreaType = AreaType.Suburban);
 
 public sealed record LoadView(
     Guid Id, Guid ShipperId, string? OriginAddress, string? DestinationAddress,
     DateTimeOffset PickupStart, DateTimeOffset PickupEnd, CargoType CargoType,
     decimal WeightKg, decimal? OfferedPriceInr, LoadStatus Status,
-    decimal? DistanceKm, int? EstimatedDurationMinutes);
+    decimal? DistanceKm, int? EstimatedDurationMinutes, AreaType PickupAreaType);
 
 public interface ILoadService
 {
@@ -60,7 +61,8 @@ internal sealed class LoadService : ILoadService
             Location.Create(GeoCoordinate.Create(request.DestinationLat, request.DestinationLng), request.DestinationAddress),
             TimeWindow.Create(request.PickupStart, request.PickupEnd),
             LoadRequirement.Create(request.CargoType, Weight.FromKilograms(request.WeightKg)),
-            request.OfferedPriceInr is decimal price ? Money.Of(price) : null);
+            request.OfferedPriceInr is decimal price ? Money.Of(price) : null,
+            request.PickupAreaType);
 
         // The platform computes distance + ETA — the shipper never enters them (M4.3 Step 1).
         // Fail-soft: if the route provider is unavailable the load still posts (metrics stay null).
@@ -105,5 +107,5 @@ internal sealed class LoadService : ILoadService
         l.Id, l.ShipperId, l.Origin.Address, l.Destination.Address,
         l.PickupWindow.Start, l.PickupWindow.End, l.Requirement.CargoType,
         l.Requirement.Weight.Kilograms, l.OfferedPrice?.Amount, l.Status,
-        l.DistanceKm, l.EstimatedDurationMinutes);
+        l.DistanceKm, l.EstimatedDurationMinutes, l.PickupAreaType);
 }

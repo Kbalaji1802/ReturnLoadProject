@@ -28,6 +28,7 @@ class _State extends ConsumerState<OwnerTripTrackingScreen> {
   String? _tripId;
   Map<String, dynamic>? _live;
   String? _error;
+  bool _busy = false;
   Timer? _timer;
   final _map = MapController();
 
@@ -62,6 +63,22 @@ class _State extends ConsumerState<OwnerTripTrackingScreen> {
       final res = await ref.read(dioProvider).get<dynamic>('trips/$id/tracking/live');
       if (mounted) setState(() => _live = res.data['data'] as Map<String, dynamic>);
     } catch (_) {/* keep last known */}
+  }
+
+  /// The load owner confirms a pickup/delivery gate (Part 5) — advances the trip past the gate.
+  Future<void> _confirm(String targetName, String doneMessage) async {
+    final id = _tripId;
+    if (id == null) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(dioProvider).post<dynamic>('trips/$id/status/$targetName');
+      await _poll();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(doneMessage)));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not confirm right now.')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -120,6 +137,24 @@ class _State extends ConsumerState<OwnerTripTrackingScreen> {
                 const SizedBox(width: 20),
                 _metric(Icons.schedule, 'ETA', live['etaMinutes'] != null ? _eta(live['etaMinutes']) : '—'),
               ]),
+            // Owner-confirmation gates (Part 5): the owner authorises loading at pickup and confirms
+            // delivery. These appear only at the exact step that needs the owner's sign-off.
+            if (live != null && live['status'] == 3) ...[
+              const SizedBox(height: 12),
+              if (_busy) const LinearProgressIndicator() else FilledButton.icon(
+                onPressed: () => _confirm('PickupConfirmed', 'Pickup confirmed — the driver can load.'),
+                icon: const Icon(Icons.inventory),
+                label: const Text('Confirm pickup'),
+              ),
+            ],
+            if (live != null && live['status'] == 7) ...[
+              const SizedBox(height: 12),
+              if (_busy) const LinearProgressIndicator() else FilledButton.icon(
+                onPressed: () => _confirm('DeliveryConfirmed', 'Delivery confirmed.'),
+                icon: const Icon(Icons.check_circle),
+                label: const Text('Confirm delivery'),
+              ),
+            ],
             if (live != null && live['status'] == 8 && _tripId != null) ...[
               const SizedBox(height: 12),
               FilledButton.icon(

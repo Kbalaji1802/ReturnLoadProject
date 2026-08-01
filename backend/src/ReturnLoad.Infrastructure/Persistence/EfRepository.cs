@@ -31,7 +31,18 @@ internal sealed class EfRepository<TAggregate> : IRepository<TAggregate>
     public async Task AddAsync(TAggregate aggregate, CancellationToken cancellationToken = default) =>
         await _db.Set<TAggregate>().AddAsync(aggregate, cancellationToken);
 
-    public void Update(TAggregate aggregate) => _db.Set<TAggregate>().Update(aggregate);
+    public void Update(TAggregate aggregate)
+    {
+        // If the aggregate is already tracked (loaded via GetById/List then mutated — the common
+        // path), change tracking already sees the mutations, including added owned-collection
+        // children. Forcing the whole graph Modified via Set.Update() would wrongly mark those new
+        // children Modified (UPDATE a non-existent row → 0 rows affected → false concurrency error).
+        // Only a detached aggregate needs an explicit re-attach.
+        if (_db.Entry(aggregate).State == EntityState.Detached)
+        {
+            _db.Set<TAggregate>().Update(aggregate);
+        }
+    }
 
     public void Remove(TAggregate aggregate) => _db.Set<TAggregate>().Remove(aggregate);
 }

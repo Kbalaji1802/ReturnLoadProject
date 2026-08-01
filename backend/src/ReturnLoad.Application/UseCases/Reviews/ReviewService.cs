@@ -28,6 +28,9 @@ public interface IReviewService
 
     Task<Result<IReadOnlyList<ReviewView>>> ListForTripAsync(Guid tripId, CancellationToken cancellationToken = default);
 
+    /// <summary>Reviews written ABOUT a user (subject), newest first — for the admin details pages (Part 11).</summary>
+    Task<Result<IReadOnlyList<ReviewView>>> ListForSubjectAsync(Guid subjectUserProfileId, CancellationToken cancellationToken = default);
+
     /// <summary>Average rating + count for a user profile (subject of reviews).</summary>
     Task<RatingSummary> GetSummaryAsync(Guid subjectUserProfileId, CancellationToken cancellationToken = default);
 }
@@ -115,6 +118,13 @@ internal sealed class ReviewService : IReviewService
     {
         IReadOnlyList<Review> reviews = await _reviews.ListAsync(r => r.TripId == tripId, cancellationToken);
         return Result<IReadOnlyList<ReviewView>>.Success(reviews.Select(Map).ToList());
+    }
+
+    public async Task<Result<IReadOnlyList<ReviewView>>> ListForSubjectAsync(Guid subjectUserProfileId, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Review> reviews = await _reviews.ListAsync(r => r.SubjectUserProfileId == subjectUserProfileId, cancellationToken);
+        IReadOnlyList<ReviewView> views = reviews.OrderByDescending(r => r.CreatedAtUtc).Select(Map).ToList();
+        return Result<IReadOnlyList<ReviewView>>.Success(views);
     }
 
     public async Task<RatingSummary> GetSummaryAsync(Guid subjectUserProfileId, CancellationToken cancellationToken = default)

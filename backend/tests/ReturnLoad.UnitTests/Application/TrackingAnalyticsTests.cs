@@ -26,6 +26,35 @@ public sealed class TrackingAnalyticsTests
     }
 
     [Fact]
+    public void RecentSpeed_uses_recent_moving_readings_not_a_stalled_start()
+    {
+        // The trip sat idle at the start (0 kph) then began moving at ~50 kph. ETA must reflect the
+        // recent movement, not the whole-trip average that a long idle would drag toward zero (Part 6).
+        var points = new[]
+        {
+            Point(13.00, 80.00, 0, Start),
+            Point(13.00, 80.00, 0, Start.AddMinutes(30)),
+            Point(13.05, 80.00, 48, Start.AddMinutes(35)),
+            Point(13.10, 80.00, 52, Start.AddMinutes(40)),
+        };
+
+        double recent = TrackingAnalytics.RecentSpeedKph(points);
+        Assert.Equal(50, recent);   // (48 + 52) / 2 — the idle zeros are ignored
+    }
+
+    [Fact]
+    public void RecentSpeed_is_zero_for_a_genuinely_stopped_trip_with_no_travel()
+    {
+        var points = new[]
+        {
+            Point(13.00, 80.00, 0, Start),
+            Point(13.00, 80.00, 0, Start.AddMinutes(5)),
+        };
+
+        Assert.Equal(0, TrackingAnalytics.RecentSpeedKph(points)); // honestly unknown → caller yields null ETA
+    }
+
+    [Fact]
     public void Summarises_distance_duration_and_speeds()
     {
         // ~1 km north over 2 minutes; speeds 30 then 50 kph.

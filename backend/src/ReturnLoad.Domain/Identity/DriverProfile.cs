@@ -21,6 +21,7 @@ public sealed class DriverProfile : AggregateRoot<Guid>
         Licence = licence;
         Aadhaar = aadhaar;
         Status = DriverStatus.Pending;
+        Availability = DriverAvailability.Offline;
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
 
@@ -37,9 +38,28 @@ public sealed class DriverProfile : AggregateRoot<Guid>
 
     public DriverStatus Status { get; private set; }
 
+    /// <summary>
+    /// Operational availability to receive new loads (Part 3). Independent of <see cref="Status"/>:
+    /// a driver is matchable only when verified (<see cref="DriverStatus.Active"/>) <b>and</b>
+    /// <see cref="DriverAvailability.Available"/>.
+    /// </summary>
+    public DriverAvailability Availability { get; private set; }
+
     public DateTimeOffset CreatedAtUtc { get; }
 
     public bool IsTransactable => Status == DriverStatus.Active;
+
+    /// <summary>Matchable = verified and available (both gates, correction-sprint Parts 2–3).</summary>
+    public bool IsAvailableForLoads => Status == DriverStatus.Active && Availability == DriverAvailability.Available;
+
+    /// <summary>Driver's last-known latitude, if they have shared a location (Part 7 owner view / matching).</summary>
+    public double? LastKnownLatitude { get; private set; }
+
+    /// <summary>Driver's last-known longitude, if they have shared a location.</summary>
+    public double? LastKnownLongitude { get; private set; }
+
+    /// <summary>When the last-known location was captured (staleness signal for the owner).</summary>
+    public DateTimeOffset? LastLocationAtUtc { get; private set; }
 
     public static DriverProfile Register(Guid userProfileId, DrivingLicenceNumber licence, AadhaarNumber? aadhaar = null)
     {
@@ -74,6 +94,62 @@ public sealed class DriverProfile : AggregateRoot<Guid>
     }
 
     public void Block() => Status = DriverStatus.Blocked;
+
+    /// <summary>
+    /// The driver sets their own availability (Part 3). <see cref="DriverAvailability.Busy"/> is
+    /// system-managed (see <see cref="MarkBusy"/>) and cannot be chosen manually — a driver becomes
+    /// busy by being assigned a trip, not by tapping a button.
+    /// </summary>
+    public void SetAvailability(DriverAvailability target)
+    {
+        Guard.Against(
+            target == DriverAvailability.Busy,
+            "Busy is set automatically when you are on a trip.",
+            "driver_busy_not_manual");
+        ChangeAvailability(target);
+    }
+
+    /// <summary>
+    /// Marks the driver busy because a trip was assigned to them (called from booking acceptance).
+    /// Idempotent — safe to call when already busy.
+    /// </summary>
+    public void MarkBusy() => ChangeAvailability(DriverAvailability.Busy);
+
+    /// <summary>
+    /// Releases the driver from <see cref="DriverAvailability.Busy"/> when their trip ends,
+    /// returning them to <see cref="DriverAvailability.Available"/>. Only transitions <b>out of
+    /// Busy</b> — a driver who set themselves Offline/OnLeave/VehicleService stays there.
+    /// </summary>
+    public void ReleaseFromTrip()
+    {
+        if (Availability == DriverAvailability.Busy)
+        {
+            ChangeAvailability(DriverAvailability.Available);
+        }
+    }
+
+    /// <summary>
+    /// Records the driver's current location (Part 7). Fed by live tracking pings and by a driver
+    /// sharing GPS when clocking in — so the load owner can see each candidate's distance/ETA to the
+    /// pickup and matching can honour the pickup radius (ADR-0019).
+    /// </summary>
+    public void RecordLocation(double latitude, double longitude, DateTimeOffset atUtc)
+    {
+        LastKnownLatitude = latitude;
+        LastKnownLongitude = longitude;
+        LastLocationAtUtc = atUtc;
+    }
+
+    private void ChangeAvailability(DriverAvailability target)
+    {
+        if (Availability == target)
+        {
+            return;
+        }
+
+        Availability = target;
+        Raise(new DriverAvailabilityChanged(Id, target, DateTimeOffset.UtcNow));
+    }
 
     public void UpdateLicence(DrivingLicenceNumber licence)
     {

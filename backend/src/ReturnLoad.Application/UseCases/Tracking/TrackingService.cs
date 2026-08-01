@@ -1,4 +1,5 @@
 using ReturnLoad.Application.Abstractions.Persistence;
+using ReturnLoad.Application.Abstractions.Realtime;
 using ReturnLoad.Domain.Identity;
 using ReturnLoad.Domain.Loads;
 using ReturnLoad.Domain.Tracking;
@@ -51,6 +52,7 @@ internal sealed class TrackingService : ITrackingService
     private readonly IRepository<UserProfile> _users;
     private readonly IRepository<DriverProfile> _drivers;
     private readonly IRepository<Load> _loads;
+    private readonly ILiveTrackingNotifier _liveNotifier;
     private readonly IUnitOfWork _uow;
 
     public TrackingService(
@@ -59,6 +61,7 @@ internal sealed class TrackingService : ITrackingService
         IRepository<UserProfile> users,
         IRepository<DriverProfile> drivers,
         IRepository<Load> loads,
+        ILiveTrackingNotifier liveNotifier,
         IUnitOfWork uow)
     {
         _trips = trips;
@@ -66,6 +69,7 @@ internal sealed class TrackingService : ITrackingService
         _users = users;
         _drivers = drivers;
         _loads = loads;
+        _liveNotifier = liveNotifier;
         _uow = uow;
     }
 
@@ -107,7 +111,29 @@ internal sealed class TrackingService : ITrackingService
             request.BatteryLevel, TrackingSource.Device);
 
         await _tracking.AddAsync(evt, cancellationToken);
+
+        // Keep the driver's last-known location current so the load owner sees live distance/ETA
+        // to pickup and matching honours the pickup radius (Part 7 / ADR-0019).
+        driver.RecordLocation(request.Latitude, request.Longitude, request.CapturedAtUtc);
+        _drivers.Update(driver);
+
         await _uow.SaveChangesAsync(cancellationToken);
+
+        // Push the new position to everyone watching this trip so the map marker moves in real time
+        // instead of by polling (Part 6). Ingestion only happens while the trip is active, so this
+        // naturally pauses on completion.
+        double distanceRemaining = TrackingAnalytics.HaversineKm(
+            request.Latitude, request.Longitude,
+            trip.Destination.Coordinate.Latitude, trip.Destination.Coordinate.Longitude);
+        IReadOnlyList<TrackingEvent> points = await OrderedPointsAsync(tripId, cancellationToken);
+        double recentSpeed = TrackingAnalytics.RecentSpeedKph(points);
+        int? eta = recentSpeed > 0 ? (int)Math.Round(distanceRemaining / recentSpeed * 60) : null;
+        await _liveNotifier.PositionRecordedAsync(
+            new TripLivePush(
+                tripId, request.Latitude, request.Longitude, request.CapturedAtUtc,
+                request.SpeedKph, request.HeadingDegrees, Math.Round(distanceRemaining, 1), eta),
+            cancellationToken);
+
         return Result.Success();
     }
 
@@ -143,8 +169,10 @@ internal sealed class TrackingService : ITrackingService
             latest.Point.Coordinate.Latitude, latest.Point.Coordinate.Longitude,
             trip.Destination.Coordinate.Latitude, trip.Destination.Coordinate.Longitude);
 
-        TripTrackingSummary summary = TrackingAnalytics.Summarize(points);
-        int? eta = summary.AvgSpeedKph > 0 ? (int)Math.Round(distanceRemaining / summary.AvgSpeedKph * 60) : null;
+        // ETA from the driver's recent speed (Part 6) — not the whole-trip average, which collapsed
+        // to null whenever the trip was momentarily idle.
+        double recentSpeed = TrackingAnalytics.RecentSpeedKph(points);
+        int? eta = recentSpeed > 0 ? (int)Math.Round(distanceRemaining / recentSpeed * 60) : null;
 
         return new TripLiveView(
             trip.Id, trip.Status, true,

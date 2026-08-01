@@ -24,7 +24,8 @@ public sealed class Load : AggregateRoot<Guid>
         Location destination,
         TimeWindow pickupWindow,
         LoadRequirement requirement,
-        Money? offeredPrice)
+        Money? offeredPrice,
+        AreaType pickupAreaType)
         : base(id)
     {
         ShipperId = shipperId;
@@ -33,6 +34,7 @@ public sealed class Load : AggregateRoot<Guid>
         PickupWindow = pickupWindow;
         Requirement = requirement;
         OfferedPrice = offeredPrice;
+        PickupAreaType = pickupAreaType;
         Status = LoadStatus.Draft;
         CreatedAtUtc = DateTimeOffset.UtcNow;
     }
@@ -53,6 +55,12 @@ public sealed class Load : AggregateRoot<Guid>
 
     public Money? OfferedPrice { get; private set; }
 
+    /// <summary>
+    /// The pickup's road environment (Part 2). Sets the matching pickup radius (Urban/Suburban/
+    /// Highway → configured km). Chosen by the shipper at posting; defaults to Suburban.
+    /// </summary>
+    public AreaType PickupAreaType { get; private set; }
+
     public LoadStatus Status { get; private set; }
 
     /// <summary>Road distance origin→destination in km, computed by the platform (M4.3 Step 1).</summary>
@@ -69,7 +77,8 @@ public sealed class Load : AggregateRoot<Guid>
         Location destination,
         TimeWindow pickupWindow,
         LoadRequirement requirement,
-        Money? offeredPrice = null)
+        Money? offeredPrice = null,
+        AreaType pickupAreaType = AreaType.Suburban)
     {
         Guard.AgainstDefault(shipperId, "Shipper id", "load_shipper_required");
         ArgumentNullException.ThrowIfNull(origin);
@@ -78,7 +87,7 @@ public sealed class Load : AggregateRoot<Guid>
         ArgumentNullException.ThrowIfNull(requirement);
         Guard.Against(origin == destination, "Origin and destination must differ.", "load_same_origin_destination");
 
-        Load load = new(Guid.NewGuid(), shipperId, origin, destination, pickupWindow, requirement, offeredPrice);
+        Load load = new(Guid.NewGuid(), shipperId, origin, destination, pickupWindow, requirement, offeredPrice, pickupAreaType);
         load.Raise(new LoadCreated(load.Id, shipperId, load.CreatedAtUtc));
         return load;
     }

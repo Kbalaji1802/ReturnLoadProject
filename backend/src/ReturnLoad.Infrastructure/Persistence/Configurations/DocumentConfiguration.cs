@@ -35,3 +35,26 @@ public sealed class DocumentConfiguration : AggregateConfiguration<Document>
         builder.HasIndex(d => d.ExpiresOn);
     }
 }
+
+/// <summary>
+/// Persists the append-only Operations decision history (Part 8). A separate aggregate — like
+/// <c>TrackingEvent</c>/<c>AuditLog</c> (ADR-0014) — keyed by <see cref="DocumentReview.DocumentId"/>,
+/// so a rejection reason is never overwritten and every re-upload keeps its trail.
+/// </summary>
+public sealed class DocumentReviewConfiguration : AggregateConfiguration<DocumentReview>
+{
+    protected override void ConfigureAggregate(EntityTypeBuilder<DocumentReview> builder)
+    {
+        builder.ToTable("DocumentReviews");
+        builder.HasKey(r => r.Id);
+
+        builder.Property(r => r.DocumentId).IsRequired();
+        builder.Property(r => r.Decision).HasConversion<string>().HasMaxLength(16).IsRequired();
+        builder.Property(r => r.Reason).HasMaxLength(500);
+        builder.Property(r => r.DecidedByUserId);
+        builder.Property(r => r.DecidedAtUtc).IsRequired();
+
+        builder.HasOne<Document>().WithMany().HasForeignKey(r => r.DocumentId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasIndex(r => r.DocumentId);
+    }
+}

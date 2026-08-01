@@ -104,12 +104,40 @@ public sealed class DocumentsController : ControllerBase
         return result.ToApiResult(HttpContext);
     }
 
+    /// <summary>
+    /// Streams a document's file for the Operations preview/download (Part 1). Staff-only — the
+    /// reviewer opens it in the preview dialog (zoom/rotate/fullscreen) or downloads it.
+    /// </summary>
+    [HttpGet("{id:guid}/file")]
+    [Authorize(Policy = AuthorizationPolicies.CanVerifyDocuments)]
+    public async Task<IActionResult> Download(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _documents.GetFileAsync(id, cancellationToken);
+        if (result.IsFailure)
+        {
+            return result.ToApiResult(HttpContext);
+        }
+
+        DocumentFile file = result.Value;
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
+    /// <summary>The document's append-only review history (approve/reject decisions with reasons).</summary>
+    [HttpGet("{id:guid}/history")]
+    [Authorize(Policy = AuthorizationPolicies.CanVerifyDocuments)]
+    public async Task<IActionResult> History(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _documents.ListReviewHistoryAsync(id, cancellationToken);
+        return result.ToApiResult(HttpContext);
+    }
+
     /// <summary>Operations approves a document (verifies the driver when a licence is approved).</summary>
     [HttpPost("{id:guid}/approve")]
     [Authorize(Policy = AuthorizationPolicies.CanVerifyDocuments)]
     public async Task<IActionResult> Approve(Guid id, CancellationToken cancellationToken)
     {
-        var result = await _documents.ApproveAsync(id, cancellationToken);
+        HttpContext.TryGetUserId(out Guid adminUserId);
+        var result = await _documents.ApproveAsync(id, adminUserId, cancellationToken);
         return result.ToApiResult(HttpContext, "Document approved.");
     }
 
@@ -117,7 +145,8 @@ public sealed class DocumentsController : ControllerBase
     [Authorize(Policy = AuthorizationPolicies.CanVerifyDocuments)]
     public async Task<IActionResult> Reject(Guid id, [FromBody] RejectDocumentBody body, CancellationToken cancellationToken)
     {
-        var result = await _documents.RejectAsync(id, body.Reason, cancellationToken);
+        HttpContext.TryGetUserId(out Guid adminUserId);
+        var result = await _documents.RejectAsync(id, body.Reason, adminUserId, cancellationToken);
         return result.ToApiResult(HttpContext, "Document rejected.");
     }
 }

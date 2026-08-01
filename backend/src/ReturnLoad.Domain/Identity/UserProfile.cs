@@ -37,6 +37,12 @@ public sealed class UserProfile : AggregateRoot<Guid>
 
     public Language PreferredLanguage { get; private set; }
 
+    /// <summary>
+    /// Optional profile photo URL (Part 1 — the admin verification queue shows the driver's face;
+    /// null renders an initials avatar). Set via profile edit; the platform never fabricates one.
+    /// </summary>
+    public string? PhotoUrl { get; private set; }
+
     public DateTimeOffset CreatedAtUtc { get; }
 
     public static UserProfile Create(
@@ -60,4 +66,8 @@ public sealed class UserProfile : AggregateRoot<Guid>
     }
 
     public void SetPreferredLanguage(Language language) => PreferredLanguage = language;
+
+    /// <summary>Sets (or clears) the profile photo URL. Trimmed; blank becomes null.</summary>
+    public void SetPhotoUrl(string? photoUrl) =>
+        PhotoUrl = string.IsNullOrWhiteSpace(photoUrl) ? null : photoUrl.Trim();
 }

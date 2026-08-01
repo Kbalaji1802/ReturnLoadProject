@@ -41,6 +41,14 @@ public sealed class ReviewsController : ControllerBase
         return result.ToApiResult(HttpContext);
     }
 
+    /// <summary>Reviews written about a user (newest first) — for the admin details pages.</summary>
+    [HttpGet("for-user/{userProfileId:guid}")]
+    public async Task<IActionResult> ForUser(Guid userProfileId, CancellationToken cancellationToken)
+    {
+        var result = await _reviews.ListForSubjectAsync(userProfileId, cancellationToken);
+        return result.ToApiResult(HttpContext);
+    }
+
     /// <summary>A user's average rating + review count.</summary>
     [HttpGet("summary/{userProfileId:guid}")]
     public async Task<IActionResult> Summary(Guid userProfileId, CancellationToken cancellationToken)

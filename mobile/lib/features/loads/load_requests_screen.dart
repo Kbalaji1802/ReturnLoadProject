@@ -88,6 +88,13 @@ class _LoadRequestsScreenState extends ConsumerState<LoadRequestsScreen> {
   Widget _requestCard(Map<String, dynamic> r) {
     final text = Theme.of(context).textTheme;
     final pending = r['status'] == 0;
+    final rating = (r['driverRating'] as num?)?.toDouble();
+    final completedTrips = (r['completedTrips'] as num?)?.toInt() ?? 0;
+    final distance = (r['distanceFromPickupKm'] as num?)?.toDouble();
+    final eta = (r['etaToPickupMinutes'] as num?)?.toInt();
+    final int? verification = (r['verificationStatus'] as num?)?.toInt();
+    final int? availability = (r['availability'] as num?)?.toInt();
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -104,11 +111,19 @@ class _LoadRequestsScreenState extends ConsumerState<LoadRequestsScreen> {
               ])),
               StatusPill(labelOf(bookingStatus, r['status'])),
             ]),
-            const SizedBox(height: 8),
-            Row(children: [
-              const Icon(Icons.verified, size: 16, color: AppColors.success),
-              const SizedBox(width: 4),
-              Text('Verified driver & vehicle', style: text.bodySmall),
+            const SizedBox(height: 10),
+            // Real decision context (Part 7) — never a hardcoded "verified" claim.
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              _chip(Icons.star, rating != null ? '${rating.toStringAsFixed(1)} (${completedTrips} trips)' : 'New · $completedTrips trips'),
+              if (verification != null)
+                _chip(verification == 1 ? Icons.verified : Icons.gpp_maybe,
+                    driverStatus[verification] ?? '—',
+                    color: verification == 1 ? AppColors.success : AppColors.warning),
+              if (availability != null)
+                _chip(Icons.circle, driverAvailability[availability] ?? '—',
+                    color: availability == 0 ? AppColors.success : AppColors.warning),
+              if (distance != null) _chip(Icons.route, '${distance.toStringAsFixed(0)} km away'),
+              if (eta != null) _chip(Icons.schedule, _eta(eta)),
             ]),
             if (pending) ...[
               const SizedBox(height: 14),
@@ -122,6 +137,25 @@ class _LoadRequestsScreenState extends ConsumerState<LoadRequestsScreen> {
         ),
       ),
     );
+  }
+
+  Widget _chip(IconData icon, String label, {Color? color}) {
+    final c = color ?? Theme.of(context).colorScheme.onSurfaceVariant;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(color: c.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(20)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 14, color: c),
+        const SizedBox(width: 5),
+        Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: c, fontWeight: FontWeight.w600)),
+      ]),
+    );
+  }
+
+  static String _eta(int minutes) {
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    return h > 0 ? 'ETA ${h}h ${m}m' : 'ETA ${m}m';
   }
 
   Widget _empty() => ListView(children: [

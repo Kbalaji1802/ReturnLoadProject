@@ -1,3 +1,4 @@
+using ReturnLoad.Application.Abstractions.Geo;
 using ReturnLoad.Application.Abstractions.Persistence;
 using ReturnLoad.Application.UseCases.Notifications;
 using ReturnLoad.Application.UseCases.Reviews;
@@ -10,10 +11,17 @@ using ReturnLoad.Shared.Results;
 
 namespace ReturnLoad.Application.UseCases.Bookings;
 
+/// <summary>
+/// A booking request enriched for the load owner's choose-a-driver screen (Part 7): the driver's
+/// name, vehicle, rating, completed-trip count, verification status, current availability, and
+/// distance/ETA from their last-known location to the pickup — everything needed to pick one driver.
+/// </summary>
 public sealed record BookingRequestView(
     Guid Id, Guid LoadId, Guid DriverProfileId, Guid VehicleId,
     BookingRequestStatus Status, DateTimeOffset CreatedAtUtc, DateTimeOffset? DecidedAtUtc,
-    string? DriverName, string? VehicleRegistration, double? DriverRating = null);
+    string? DriverName, string? VehicleRegistration, double? DriverRating = null,
+    int CompletedTrips = 0, double? DistanceFromPickupKm = null, int? EtaToPickupMinutes = null,
+    DriverStatus? VerificationStatus = null, DriverAvailability? Availability = null);
 
 /// <summary>
 /// The booking-request workflow (M4.3 Steps 3–4): a verified driver requests a load with one of
@@ -53,6 +61,7 @@ internal sealed class BookingService : IBookingService
     private readonly IRepository<Trip> _trips;
     private readonly INotificationService _notify;
     private readonly IReviewService _reviews;
+    private readonly IRouteService _routes;
     private readonly IUnitOfWork _uow;
 
     public BookingService(
@@ -65,6 +74,7 @@ internal sealed class BookingService : IBookingService
         IRepository<Trip> trips,
         INotificationService notify,
         IReviewService reviews,
+        IRouteService routes,
         IUnitOfWork uow)
     {
         _bookings = bookings;
@@ -76,6 +86,7 @@ internal sealed class BookingService : IBookingService
         _trips = trips;
         _notify = notify;
         _reviews = reviews;
+        _routes = routes;
         _uow = uow;
     }
 
@@ -195,6 +206,15 @@ internal sealed class BookingService : IBookingService
         Trip trip = Trip.Create(request.CarrierId, request.VehicleId, request.DriverProfileId, load.Origin, load.Destination, returnLeg, load.Id);
         await _trips.AddAsync(trip, cancellationToken);
 
+        // The assigned driver is now busy — they must not receive new loads while on this trip
+        // (Part 3). Released back to Available when the trip completes/cancels (TripService).
+        DriverProfile? assignedDriver = await _drivers.GetByIdAsync(request.DriverProfileId, cancellationToken);
+        if (assignedDriver is not null)
+        {
+            assignedDriver.MarkBusy();
+            _drivers.Update(assignedDriver);
+        }
+
         // The load is now assigned to this driver.
         load.MarkMatched();
         load.Book();
@@ -283,29 +303,65 @@ internal sealed class BookingService : IBookingService
 
         IReadOnlyList<BookingRequest> list = await _bookings.ListAsync(b => b.LoadId == loadId, cancellationToken);
 
-        // Enrich so the owner can choose: driver name + vehicle registration (N+1 is fine at the
-        // handful-of-requests-per-load scale). Rating / completed-trip counts arrive with Reviews.
+        // Enrich each candidate with everything the owner needs to choose one driver (Part 7):
+        // name, vehicle, rating, completed trips, verification, availability, and distance/ETA from
+        // the driver's last-known location to this load's pickup. N+1 is fine at the handful-of-
+        // requests-per-load scale.
         List<BookingRequestView> views = [];
         foreach (BookingRequest b in list)
         {
             DriverProfile? driver = await _drivers.GetByIdAsync(b.DriverProfileId, cancellationToken);
             string? driverName = null;
             double? driverRating = null;
+            int completedTrips = 0;
+            double? distanceKm = null;
+            int? etaMinutes = null;
+            DriverStatus? verification = null;
+            DriverAvailability? availability = null;
+
             if (driver is not null)
             {
                 driverName = (await _users.GetByIdAsync(driver.UserProfileId, cancellationToken))?.FullName;
                 RatingSummary summary = await _reviews.GetSummaryAsync(driver.UserProfileId, cancellationToken);
                 driverRating = summary.Count > 0 ? summary.Average : null;
+                verification = driver.Status;
+                availability = driver.Availability;
+
+                completedTrips = (await _trips.ListAsync(
+                    t => t.DriverProfileId == driver.Id && t.Status == TripStatus.Completed, cancellationToken)).Count;
+
+                if (driver.LastKnownLatitude is double dLat && driver.LastKnownLongitude is double dLng)
+                {
+                    RouteResult? route = await _routes.GetRouteAsync(
+                        dLat, dLng, load.Origin.Coordinate.Latitude, load.Origin.Coordinate.Longitude, cancellationToken);
+                    if (route is not null)
+                    {
+                        distanceKm = (double)route.DistanceKm;
+                        etaMinutes = (int)Math.Round(route.EstimatedDuration.TotalMinutes);
+                    }
+                }
             }
 
             Vehicle? vehicle = await _vehicles.GetByIdAsync(b.VehicleId, cancellationToken);
-            views.Add(Map(b) with { DriverName = driverName, VehicleRegistration = vehicle?.Registration.Value, DriverRating = driverRating });
+            views.Add(Map(b) with
+            {
+                DriverName = driverName,
+                VehicleRegistration = vehicle?.Registration.Value,
+                DriverRating = driverRating,
+                CompletedTrips = completedTrips,
+                DistanceFromPickupKm = distanceKm,
+                EtaToPickupMinutes = etaMinutes,
+                VerificationStatus = verification,
+                Availability = availability,
+            });
         }
 
-        // Show pending requests first, best-rated drivers on top (a preferred-partner signal).
+        // Show pending requests first, best-rated drivers on top (a preferred-partner signal),
+        // then the nearest to the pickup — the owner's most likely pick.
         List<BookingRequestView> ordered = views
             .OrderBy(v => v.Status == BookingRequestStatus.Pending ? 0 : 1)
             .ThenByDescending(v => v.DriverRating ?? 0)
+            .ThenBy(v => v.DistanceFromPickupKm ?? double.MaxValue)
             .ThenBy(v => v.CreatedAtUtc)
             .ToList();
 

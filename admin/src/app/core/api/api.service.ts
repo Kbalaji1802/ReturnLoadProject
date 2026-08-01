@@ -26,6 +26,14 @@ export class ApiService {
       .post<ApiEnvelope<T>>(`${this.baseUrl}/${path}`, body)
       .pipe(map((r) => unwrap(r)));
   }
+
+  /**
+   * Fetches a raw binary payload (e.g. a document file) with the auth header attached by the
+   * interceptor. Used by the document preview/download — the response is NOT the JSON envelope.
+   */
+  getBlob(path: string): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/${path}`, { responseType: 'blob' });
+  }
 }
 
 /**

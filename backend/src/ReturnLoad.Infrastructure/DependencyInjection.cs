@@ -73,6 +73,15 @@ public static class DependencyInjection
         // Matching ranking parameters (M5) — tunable via the "Matching" config section.
         services.Configure<MatchingOptions>(configuration.GetSection(MatchingOptions.SectionName));
 
+        // Live-tracking push (Part 6): a no-op by default so the app runs without a realtime
+        // transport (e.g. in tests); the API layer overrides this with the SignalR implementation.
+        services.AddSingleton<Application.Abstractions.Realtime.ILiveTrackingNotifier,
+            Application.Abstractions.Realtime.NoOpLiveTrackingNotifier>();
+
+        // Trip-lifecycle parameters (Part 5) — owner-confirmation window, via the "Trips" section.
+        services.Configure<ReturnLoad.Application.UseCases.Trips.TripOptions>(
+            configuration.GetSection(ReturnLoad.Application.UseCases.Trips.TripOptions.SectionName));
+
         AddIdentity(services, configuration);
 
         return services;

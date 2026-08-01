@@ -36,6 +36,7 @@ public sealed class Trip : AggregateRoot<Guid>
         LoadId = loadId;
         Status = TripStatus.Created;
         CreatedAtUtc = DateTimeOffset.UtcNow;
+        StatusChangedAtUtc = CreatedAtUtc;
     }
 
     private Trip()
@@ -66,6 +67,15 @@ public sealed class Trip : AggregateRoot<Guid>
 
     public DateTimeOffset? CompletedAtUtc { get; private set; }
 
+    /// <summary>When the trip last changed status — the clock the owner-confirmation timeout runs against (Part 5).</summary>
+    public DateTimeOffset StatusChangedAtUtc { get; private set; }
+
+    /// <summary>True if pickup was advanced by the driver after the owner-confirm window elapsed, not by the owner.</summary>
+    public bool PickupAutoConfirmed { get; private set; }
+
+    /// <summary>True if delivery was advanced by the driver after the owner-confirm window elapsed, not by the owner.</summary>
+    public bool DeliveryAutoConfirmed { get; private set; }
+
     public static Trip Create(
         Guid carrierId,
         Guid vehicleId,
@@ -91,25 +101,37 @@ public sealed class Trip : AggregateRoot<Guid>
     /// <summary>Whether this trip is currently on the road (past acceptance, before completion).</summary>
     public bool IsActive => Status is not (TripStatus.Created or TripStatus.Completed or TripStatus.Cancelled);
 
-    /// <summary>The ordered forward lifecycle (M4.3 Step 5). Cancelled is a branch, not in it.</summary>
+    /// <summary>The ordered forward lifecycle (Part 5). Cancelled is a branch, not in it.</summary>
     private static readonly TripStatus[] Lifecycle =
     [
         TripStatus.Created, TripStatus.DriverAccepted, TripStatus.DriverEnRoute, TripStatus.ArrivedPickup,
-        TripStatus.Loaded, TripStatus.InTransit, TripStatus.ArrivedDestination, TripStatus.Unloaded,
-        TripStatus.Completed,
+        TripStatus.PickupConfirmed, TripStatus.Loaded, TripStatus.InTransit, TripStatus.ArrivedDestination,
+        TripStatus.Unloaded, TripStatus.DeliveryConfirmed, TripStatus.Completed,
     ];
 
+    /// <summary>The two gates the load owner confirms (Part 5).</summary>
+    private static bool IsOwnerConfirmationStep(TripStatus status) =>
+        status is TripStatus.PickupConfirmed or TripStatus.DeliveryConfirmed;
+
     /// <summary>
-    /// Advances the trip exactly one legal step toward <paramref name="target"/>, or cancels it.
-    /// Only the immediate next state (or Cancelled, before completion) is permitted — no skipping.
-    /// Entering <see cref="TripStatus.DriverEnRoute"/> stamps the start; reaching
-    /// <see cref="TripStatus.Completed"/> stamps completion.
+    /// Advances the trip exactly one legal step toward <paramref name="target"/>, or cancels it, on
+    /// behalf of <paramref name="actor"/> (Part 5 participant authorization). Only the immediate next
+    /// state (or Cancelled, before completion) is permitted — no skipping.
+    /// <list type="bullet">
+    /// <item>Driving/physical steps may be advanced only by the <see cref="TripActor.Driver"/> (or Staff).</item>
+    /// <item>Owner-confirmation gates are advanced by the <see cref="TripActor.Owner"/> (or Staff). The
+    /// driver may self-advance a gate only once <paramref name="ownerConfirmWindow"/> has elapsed since
+    /// the trip entered the preceding state — recorded as <b>auto-confirmed</b> so a truck is never
+    /// stranded waiting on an absent owner.</item>
+    /// </list>
+    /// Entering <see cref="TripStatus.DriverEnRoute"/> stamps the start; <see cref="TripStatus.Completed"/> stamps completion.
     /// </summary>
-    public void Advance(TripStatus target)
+    public void Advance(TripStatus target, TripActor actor, DateTimeOffset nowUtc, TimeSpan ownerConfirmWindow)
     {
         if (target == TripStatus.Cancelled)
         {
             Cancel();
+            StatusChangedAtUtc = nowUtc;
             return;
         }
 
@@ -121,17 +143,55 @@ public sealed class Trip : AggregateRoot<Guid>
             $"Illegal trip transition from {Status} to {target}.",
             "trip_illegal_transition");
 
+        if (IsOwnerConfirmationStep(target))
+        {
+            AuthorizeOwnerConfirmation(target, actor, nowUtc, ownerConfirmWindow);
+        }
+        else
+        {
+            // Driving/physical steps are the driver's to advance (staff may override for support).
+            Guard.Against(
+                actor == TripActor.Owner,
+                "The load owner cannot advance the driver's steps.",
+                "trip_driver_step");
+        }
+
         Status = target;
+        StatusChangedAtUtc = nowUtc;
 
         if (target == TripStatus.DriverEnRoute)
         {
-            StartedAtUtc = DateTimeOffset.UtcNow;
+            StartedAtUtc = nowUtc;
             Raise(new TripStarted(Id, StartedAtUtc.Value));
         }
         else if (target == TripStatus.Completed)
         {
-            CompletedAtUtc = DateTimeOffset.UtcNow;
+            CompletedAtUtc = nowUtc;
             Raise(new TripCompleted(Id, CompletedAtUtc.Value));
+        }
+    }
+
+    private void AuthorizeOwnerConfirmation(TripStatus target, TripActor actor, DateTimeOffset nowUtc, TimeSpan ownerConfirmWindow)
+    {
+        if (actor is TripActor.Owner or TripActor.Staff)
+        {
+            return; // the owner confirmed (or staff overrode) — the normal path
+        }
+
+        // Driver self-advance: allowed only after the owner has had the configured window to confirm.
+        bool windowElapsed = nowUtc - StatusChangedAtUtc >= ownerConfirmWindow;
+        Guard.Against(
+            !windowElapsed,
+            "Waiting for the load owner to confirm. You can proceed once the confirmation window elapses.",
+            "trip_awaiting_owner_confirmation");
+
+        if (target == TripStatus.PickupConfirmed)
+        {
+            PickupAutoConfirmed = true;
+        }
+        else
+        {
+            DeliveryAutoConfirmed = true;
         }
     }
 

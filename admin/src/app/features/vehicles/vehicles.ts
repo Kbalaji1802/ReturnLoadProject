@@ -9,12 +9,16 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
+import { MatDialog } from '@angular/material/dialog';
+import { Router } from '@angular/router';
 
 import { ApiService } from '../../core/api/api.service';
+import { AuthService } from '../../core/auth/auth.service';
 import { VEHICLE_STATUS, label } from '../../core/api/enums';
 import { PageHeader } from '../../shared/ui/page-header';
 import { StatusChip } from '../../shared/ui/status-chip';
 import { EmptyState } from '../../shared/ui/empty-state';
+import { ConfirmDialog } from '../../shared/ui/confirm-dialog';
 
 interface VehicleView {
   readonly id: string;
@@ -80,15 +84,16 @@ const VEHICLE_TYPE: Record<number, string> = {
               <td mat-cell *matCellDef="let v"><rl-status-chip [label]="vehicleStatus(v.status)" /></td>
             </ng-container>
             <ng-container matColumnDef="actions">
-              <th mat-header-cell *matHeaderCellDef></th>
+              <th mat-header-cell *matHeaderCellDef class="right">Actions</th>
               <td mat-cell *matCellDef="let v" class="right">
-                @if (v.status === 0) {
-                  <button mat-flat-button (click)="approve(v.id)"><mat-icon>check</mat-icon> Approve</button>
+                @if (v.status === 0 && canManageFleet()) {
+                  <button mat-flat-button (click)="approve(v); $event.stopPropagation()"><mat-icon>check</mat-icon> Approve</button>
                 }
+                <mat-icon class="chev">chevron_right</mat-icon>
               </td>
             </ng-container>
             <tr mat-header-row *matHeaderRowDef="cols"></tr>
-            <tr mat-row *matRowDef="let row; columns: cols"></tr>
+            <tr mat-row *matRowDef="let row; columns: cols" class="clickable" (click)="open(row.id)"></tr>
           </table>
           <mat-paginator [length]="filtered().length" [pageSize]="pageSize()"
             [pageSizeOptions]="[5, 10, 25]" (page)="onPage($event)" showFirstLastButtons />
@@ -96,11 +101,19 @@ const VEHICLE_TYPE: Record<number, string> = {
       </div>
     </div>
   `,
-  styles: [`.search { min-width: 280px; } .right { text-align: right; white-space: nowrap; }`],
+  styles: [`
+    .search { min-width: 280px; } .right { text-align: right; white-space: nowrap; }
+    .chev { vertical-align: middle; color: var(--mat-sys-on-surface-variant); margin-left: 4px; }
+    tr.clickable { cursor: pointer; } tr.clickable:hover td { background: var(--mat-sys-surface-container-high); }
+  `],
 })
 export class Vehicles {
   private readonly api = inject(ApiService);
   private readonly snack = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
+  private readonly router = inject(Router);
+  private readonly auth = inject(AuthService);
+  protected readonly canManageFleet = this.auth.canManageFleet;
   protected readonly cols = ['reg', 'type', 'payload', 'status', 'actions'];
   protected readonly statuses = [0, 1, 2, 3];
 
@@ -134,11 +147,22 @@ export class Vehicles {
   protected onStatus(v: number) { this.statusFilter.set(v); this.pageIndex.set(0); }
   protected onPage(e: PageEvent) { this.pageIndex.set(e.pageIndex); this.pageSize.set(e.pageSize); }
 
-  protected approve(id: string): void {
-    this.busy.set(true);
-    this.api.post(`vehicles/${id}/activate?documentsValid=true`, {}).subscribe({
-      next: () => { this.snack.open('Vehicle approved.', 'OK', { duration: 2500 }); this.load(); },
-      error: () => { this.snack.open('Approval failed.', 'OK', { duration: 3000 }); this.busy.set(false); },
+  protected open(id: string) { this.router.navigate(['/vehicles', id]); }
+
+  protected approve(v: VehicleView): void {
+    this.dialog.open(ConfirmDialog, {
+      data: {
+        title: 'Approve vehicle?',
+        message: `Activate ${v.registrationNumber} for matching? Only approve once its RC, insurance and permit are verified.`,
+        confirmLabel: 'Approve',
+      },
+    }).afterClosed().subscribe((ok) => {
+      if (!ok) return;
+      this.busy.set(true);
+      this.api.post(`vehicles/${v.id}/activate?documentsValid=true`, {}).subscribe({
+        next: () => { this.snack.open('Vehicle approved.', 'OK', { duration: 2500 }); this.load(); },
+        error: () => { this.snack.open('Approval failed.', 'OK', { duration: 3000 }); this.busy.set(false); },
+      });
     });
   }
 

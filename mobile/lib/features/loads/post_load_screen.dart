@@ -18,11 +18,12 @@ class PostLoadScreen extends ConsumerStatefulWidget {
 }
 
 class _State extends ConsumerState<PostLoadScreen> {
-  final _origin = TextEditingController(text: 'Chennai');
-  final _dest = TextEditingController(text: 'Coimbatore');
-  final _weight = TextEditingController(text: '5000');
-  final _price = TextEditingController(text: '15000');
+  final _origin = TextEditingController();
+  final _dest = TextEditingController();
+  final _weight = TextEditingController();
+  final _price = TextEditingController();
   int _cargo = 0;
+  int _areaType = 1; // Suburban (≈10 km) — a safe default pickup reach (Part 2).
   bool _busy = false;
   String? _msg;
 
@@ -49,6 +50,16 @@ class _State extends ConsumerState<PostLoadScreen> {
   }
 
   Future<void> _submit() async {
+    // Basic validation — no more prefilled demo values, so guard against empty/invalid input.
+    if (_origin.text.trim().isEmpty || _dest.text.trim().isEmpty) {
+      setState(() => _msg = 'Enter both a pickup and a drop location.');
+      return;
+    }
+    if ((double.tryParse(_weight.text) ?? 0) <= 0) {
+      setState(() => _msg = 'Enter the load weight in kg.');
+      return;
+    }
+
     setState(() { _busy = true; _msg = null; });
     final now = DateTime.now().toUtc();
     try {
@@ -69,8 +80,20 @@ class _State extends ConsumerState<PostLoadScreen> {
         'cargoType': _cargo,
         'weightKg': double.tryParse(_weight.text) ?? 0,
         'offeredPriceInr': double.tryParse(_price.text),
+        'pickupAreaType': _areaType,
       });
-      setState(() => _msg = 'Load posted. Drivers can now see and accept it.');
+
+      // Success: reset the form (so it can't be re-posted with stale values) and take the owner
+      // to their loads, with a confirmation snackbar (Part 4 form-UX contract).
+      if (!mounted) return;
+      _origin.clear();
+      _dest.clear();
+      _weight.clear();
+      _price.clear();
+      setState(() { _cargo = 0; _areaType = 1; });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Load posted — drivers nearby can now see it.')));
+      context.go('/my-loads');
+      return;
     } on DioException catch (e) {
       setState(() {
         if (e.response?.statusCode == 403) {
@@ -108,6 +131,20 @@ class _State extends ConsumerState<PostLoadScreen> {
                   decoration: const InputDecoration(labelText: 'Cargo type', border: OutlineInputBorder()),
                   items: _cargoTypes.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))).toList(),
                   onChanged: (v) => setState(() => _cargo = v ?? 0),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  initialValue: _areaType,
+                  decoration: const InputDecoration(
+                    labelText: 'Pickup area', border: OutlineInputBorder(),
+                    helperText: 'Sets how far drivers can be from the pickup and still see this load',
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 0, child: Text('Urban (≈5 km reach)')),
+                    DropdownMenuItem(value: 1, child: Text('Suburban (≈10 km reach)')),
+                    DropdownMenuItem(value: 2, child: Text('Highway (≈25 km reach)')),
+                  ],
+                  onChanged: (v) => setState(() => _areaType = v ?? 1),
                 ),
                 const SizedBox(height: 12),
                 TextField(controller: _weight, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Weight (kg)', border: OutlineInputBorder())),

@@ -64,6 +64,15 @@ public sealed class TripsController : ControllerBase
         return result.ToApiResult(HttpContext);
     }
 
+    /// <summary>An enriched trip (driver name, vehicle, load) for the admin trip-details page. Staff-only.</summary>
+    [HttpGet("{id:guid}/detail")]
+    [Authorize(Policy = AuthorizationPolicies.InternalStaff)]
+    public async Task<IActionResult> Detail(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await _trips.GetDetailAsync(id, cancellationToken);
+        return result.ToApiResult(HttpContext);
+    }
+
     /// <summary>The trip fulfilling a load — so the load owner can track their shipment.</summary>
     [HttpGet("for-load/{loadId:guid}")]
     public async Task<IActionResult> ForLoad(Guid loadId, CancellationToken cancellationToken)
@@ -77,11 +86,20 @@ public sealed class TripsController : ControllerBase
         return result.ToApiResult(HttpContext);
     }
 
-    /// <summary>Advances the trip lifecycle (assigned → started → in-transit → completed / cancelled).</summary>
+    /// <summary>
+    /// Advances the trip lifecycle one legal step (Part 5). The caller is authorised against the
+    /// trip: the assigned driver runs the driving steps, the load owner confirms the pickup/delivery
+    /// gates (the driver may self-advance a gate after the configured wait), staff may override.
+    /// </summary>
     [HttpPost("{id:guid}/status/{target}")]
     public async Task<IActionResult> Advance(Guid id, TripStatus target, CancellationToken cancellationToken)
     {
-        var result = await _trips.AdvanceAsync(id, target, cancellationToken);
+        if (!HttpContext.TryGetUserId(out Guid authUserId))
+        {
+            return Unauthorized();
+        }
+
+        var result = await _trips.AdvanceAsync(authUserId, id, target, IsPrivileged, cancellationToken);
         return result.ToApiResult(HttpContext, $"Trip {target}.");
     }
 

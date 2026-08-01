@@ -60,6 +60,8 @@ public sealed class Document : AggregateRoot<Guid>
 
     public DocumentStatus Status { get; private set; }
 
+    /// <summary>The most recent rejection reason (convenience); the full audit trail is the
+    /// append-only <see cref="DocumentReview"/> stream keyed by this document's id (Part 8).</summary>
     public string? RejectionReason { get; private set; }
 
     public DateTimeOffset? VerifiedAtUtc { get; private set; }
@@ -94,7 +96,10 @@ public sealed class Document : AggregateRoot<Guid>
         VerificationStatus = VerificationStatus.UnderReview;
     }
 
-    /// <summary>Marks the document verified. Rejects if it is already expired ("fail closed").</summary>
+    /// <summary>
+    /// Marks the document verified. Rejects if it is already expired ("fail closed"). The Operations
+    /// decision is recorded as an append-only <see cref="DocumentReview"/> by the application layer.
+    /// </summary>
     public void Verify(DateOnly asOf, DateTimeOffset verifiedAtUtc)
     {
         Guard.Against(
@@ -109,11 +114,17 @@ public sealed class Document : AggregateRoot<Guid>
         Raise(new DocumentVerified(Id, verifiedAtUtc));
     }
 
+    /// <summary>
+    /// Rejects the document with a required reason and raises <see cref="DocumentRejected"/> so the
+    /// owner is notified to re-upload (Part 8). The full decision (reason + reviewer + time) is kept
+    /// as an append-only <see cref="DocumentReview"/> by the application layer — never overwritten.
+    /// </summary>
     public void Reject(string reason)
     {
         RejectionReason = Guard.AgainstNullOrWhiteSpace(reason, "Rejection reason", "document_reject_reason_required");
         VerificationStatus = VerificationStatus.Rejected;
         VerifiedAtUtc = null;
+        Raise(new DocumentRejected(Id, OwnerType, OwnerId, RejectionReason, DateTimeOffset.UtcNow));
     }
 
     /// <summary>Auto-transition on/after the expiry date; flips a Verified doc back to non-valid.</summary>

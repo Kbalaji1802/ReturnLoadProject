@@ -409,6 +409,57 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                     b.ToTable("Documents", (string)null);
                 });
 
+            modelBuilder.Entity("ReturnLoad.Domain.Documents.DocumentReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DecidedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentId");
+
+                    b.ToTable("DocumentReviews", (string)null);
+                });
+
             modelBuilder.Entity("ReturnLoad.Domain.Fleet.Vehicle", b =>
                 {
                     b.Property<Guid>("Id")
@@ -638,6 +689,11 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("AadhaarEncrypted");
 
+                    b.Property<string>("Availability")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -649,6 +705,15 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<double?>("LastKnownLatitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("LastKnownLongitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTimeOffset?>("LastLocationAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Licence")
                         .IsRequired()
@@ -676,6 +741,8 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Availability");
 
                     b.HasIndex("Licence")
                         .IsUnique();
@@ -723,6 +790,10 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("Mobile");
+
+                    b.Property<string>("PhotoUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
 
                     b.Property<string>("PreferredLanguage")
                         .IsRequired()
@@ -778,6 +849,11 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<string>("PickupAreaType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<Guid>("ShipperId")
                         .HasColumnType("uuid");
@@ -938,6 +1014,9 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<bool>("DeliveryAutoConfirmed")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("DriverProfileId")
                         .HasColumnType("uuid");
 
@@ -949,6 +1028,9 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("LoadId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("PickupAutoConfirmed")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTimeOffset?>("StartedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -956,6 +1038,9 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(24)
                         .HasColumnType("character varying(24)");
+
+                    b.Property<DateTimeOffset>("StatusChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTimeOffset?>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1218,6 +1303,15 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("VehicleId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReturnLoad.Domain.Documents.DocumentReview", b =>
+                {
+                    b.HasOne("ReturnLoad.Domain.Documents.Document", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
