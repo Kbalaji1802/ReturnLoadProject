@@ -13,9 +13,16 @@ public sealed class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Ap
 {
     public ApplicationDbContext CreateDbContext(string[] args)
     {
+        // Design-time only. Prefer an explicit connection from the environment so `dotnet ef`
+        // (e.g. `database update`) can target a real database such as Neon without hard-coding
+        // any secret; fall back to a local placeholder for offline scaffolding (`migrations add`).
+        string connection =
+            Environment.GetEnvironmentVariable("ConnectionStrings__ReturnLoadDatabase")
+            ?? "Host=localhost;Port=5432;Database=returnload_design;Username=design;Password=design";
+
         DbContextOptions<ApplicationDbContext> options =
             new DbContextOptionsBuilder<ApplicationDbContext>()
-                .UseNpgsql("Host=localhost;Port=5432;Database=returnload_design;Username=design;Password=design")
+                .UseNpgsql(connection)
                 .Options;
 
         return new ApplicationDbContext(options, new NoOpFieldEncryptor());
