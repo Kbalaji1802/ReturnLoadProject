@@ -42,6 +42,12 @@ try
         kestrel.Limits.MaxRequestBodySize = requestLimits.MaxRequestBodyBytes;
     });
 
+    // Bind to the platform-provided port. PaaS hosts (Koyeb, Render, Railway) inject a PORT
+    // environment variable and route public traffic to it; default to 8080 (the .NET container
+    // convention) for local Docker. Listens on all interfaces so the ingress can reach it.
+    string listenPort = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+    builder.WebHost.UseUrls($"http://0.0.0.0:{listenPort}");
+
     // Trust the reverse proxy's X-Forwarded-* so scheme/IP are correct behind ingress.
     builder.Services.Configure<ForwardedHeadersOptions>(options =>
     {
@@ -105,32 +111,40 @@ try
     app.UseRateLimiter();
     app.UseSerilogRequestLogging();
 
-    if (app.Environment.IsDevelopment())
-    {
-        app.UseSwagger();
-        app.UseSwaggerUI();
-    }
+    // Swagger/OpenAPI is served in every environment so the deployed API is verifiable and
+    // self-documenting (GET /swagger). This is a first-party admin/mobile API, not a public
+    // partner API; if that changes, gate this behind a config flag.
+    app.UseSwagger();
+    app.UseSwaggerUI();
 
     app.UseCors(SecurityExtensions.CorsPolicyName);
     app.UseAuthentication();
     app.UseAuthorization();
 
-    // Development convenience: apply migrations and seed demo data so the platform is
-    // demoable end-to-end. Never runs outside Development. If the database is unavailable,
-    // log loudly and continue so the process can still start for inspection.
-    if (app.Environment.IsDevelopment())
+    // Apply pending EF migrations on startup so a fresh cloud database (e.g. Neon) is brought
+    // up to schema on first boot — no manual `dotnet ef database update` needed. Demo data is
+    // seeded in Development, or in any environment when `SeedDemoData=true` (set it on the first
+    // production boot to create the admin login, then turn it off). If the database is
+    // unavailable, log loudly and continue so the process still starts for inspection.
+    bool seedDemoData = app.Environment.IsDevelopment()
+        || app.Configuration.GetValue<bool>("SeedDemoData");
+    try
     {
-        try
+        using IServiceScope scope = app.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.MigrateAsync();
+        if (seedDemoData)
         {
-            using IServiceScope scope = app.Services.CreateScope();
-            await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.MigrateAsync();
             await DemoDataSeeder.SeedAsync(scope.ServiceProvider);
-            Log.Information("Development database migrated and demo data seeded.");
+            Log.Information("Database migrated and demo data seeded.");
         }
-        catch (Exception seedEx)
+        else
         {
-            Log.Warning(seedEx, "Skipped dev migrate/seed — is PostgreSQL running? (docker compose up)");
+            Log.Information("Database migrated.");
         }
+    }
+    catch (Exception migrateEx)
+    {
+        Log.Warning(migrateEx, "Skipped startup migrate/seed — is the database reachable? (check ConnectionStrings__ReturnLoadDatabase)");
     }
 
     app.MapControllers();
