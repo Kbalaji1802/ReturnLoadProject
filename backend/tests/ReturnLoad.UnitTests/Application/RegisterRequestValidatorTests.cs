@@ -38,4 +38,23 @@ public sealed class RegisterRequestValidatorTests
 
         Assert.False(Validator.Validate(request).IsValid);
     }
+
+    [Theory]
+    [InlineData(AccountType.Driver)]
+    [InlineData(AccountType.LoadOwner)]
+    public void Accepts_the_two_public_account_types(AccountType accountType)
+    {
+        RegisterRequest request = new("owner@returnload.test", "Str0ng!Passw0rd", null, null, accountType);
+
+        Assert.True(Validator.Validate(request).IsValid);
+    }
+
+    [Fact]
+    public void Rejects_an_out_of_range_account_type()
+    {
+        // Guards against smuggling an undefined value (e.g. an attempt at an internal role).
+        RegisterRequest request = new("owner@returnload.test", "Str0ng!Passw0rd", null, null, (AccountType)99);
+
+        Assert.False(Validator.Validate(request).IsValid);
+    }
 }

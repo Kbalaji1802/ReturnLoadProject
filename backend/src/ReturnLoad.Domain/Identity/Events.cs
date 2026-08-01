@@ -10,3 +10,10 @@ public sealed record DriverRegistered(Guid DriverProfileId, Guid UserProfileId, 
 
 /// <summary>A driver's verifications passed and they became <see cref="DriverStatus.Active"/>.</summary>
 public sealed record DriverVerified(Guid DriverProfileId, DateTimeOffset OccurredAtUtc) : IDomainEvent;
+
+/// <summary>
+/// A driver's operational availability changed (correction-sprint Part 3). Consumers (matching,
+/// dispatch dashboards) react so a status change takes effect on the next match query.
+/// </summary>
+public sealed record DriverAvailabilityChanged(
+    Guid DriverProfileId, DriverAvailability Availability, DateTimeOffset OccurredAtUtc) : IDomainEvent;

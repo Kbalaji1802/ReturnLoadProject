@@ -13,3 +13,12 @@ public enum TrackingEventType
     Delivered = 3,
     Exception = 4,
 }
+
+/// <summary>Where a tracking point came from (M6). Lets analytics/fraud tools distinguish real
+/// device GPS from manual or system-generated points.</summary>
+public enum TrackingSource
+{
+    Device = 0,
+    Manual = 1,
+    System = 2,
+}

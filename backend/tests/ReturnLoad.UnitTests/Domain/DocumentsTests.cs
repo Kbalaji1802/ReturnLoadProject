@@ -60,6 +60,39 @@ public sealed class DocumentsTests
     }
 
     [Fact]
+    public void Reject_raises_event_carrying_reason_and_owner()
+    {
+        Document doc = SubmitInsurance(null);
+
+        doc.Reject("Blurry");
+
+        Assert.Equal("Blurry", doc.RejectionReason);
+        DocumentRejected evt = Assert.IsType<DocumentRejected>(Assert.Single(doc.DomainEvents, e => e is DocumentRejected));
+        Assert.Equal("Blurry", evt.Reason);
+        Assert.Equal(DocumentOwnerType.Vehicle, evt.OwnerType);
+    }
+
+    [Fact]
+    public void DocumentReview_records_the_decision_reason_and_actor()
+    {
+        Guid documentId = Guid.NewGuid();
+        Guid admin = Guid.NewGuid();
+        DateTimeOffset at = DateTimeOffset.UtcNow;
+
+        DocumentReview rejected = DocumentReview.Rejected(documentId, "Illegible", admin, at);
+        Assert.Equal(DocumentReviewDecision.Rejected, rejected.Decision);
+        Assert.Equal("Illegible", rejected.Reason);
+        Assert.Equal(admin, rejected.DecidedByUserId);
+        Assert.Equal(documentId, rejected.DocumentId);
+
+        DocumentReview approved = DocumentReview.Approved(documentId, admin, at);
+        Assert.Equal(DocumentReviewDecision.Approved, approved.Decision);
+        Assert.Null(approved.Reason);
+
+        Assert.Throws<DomainException>(() => DocumentReview.Rejected(documentId, "  ", admin, at)); // reason required
+    }
+
+    [Fact]
     public void Expiry_before_issue_is_rejected()
     {
         Assert.Throws<DomainException>(() =>

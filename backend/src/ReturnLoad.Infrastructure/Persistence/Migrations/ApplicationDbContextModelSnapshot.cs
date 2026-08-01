@@ -262,6 +262,68 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                     b.ToTable("Notifications", (string)null);
                 });
 
+            modelBuilder.Entity("ReturnLoad.Domain.Bookings.BookingRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CarrierId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset?>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DriverProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid>("LoadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("VehicleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CarrierId");
+
+                    b.HasIndex("VehicleId");
+
+                    b.HasIndex("DriverProfileId", "Status");
+
+                    b.HasIndex("LoadId", "Status");
+
+                    b.ToTable("BookingRequests", (string)null);
+                });
+
             modelBuilder.Entity("ReturnLoad.Domain.Documents.Document", b =>
                 {
                     b.Property<Guid>("Id")
@@ -345,6 +407,57 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                     b.HasIndex("OwnerType", "OwnerId");
 
                     b.ToTable("Documents", (string)null);
+                });
+
+            modelBuilder.Entity("ReturnLoad.Domain.Documents.DocumentReview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DecidedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DocumentId");
+
+                    b.ToTable("DocumentReviews", (string)null);
                 });
 
             modelBuilder.Entity("ReturnLoad.Domain.Fleet.Vehicle", b =>
@@ -576,6 +689,11 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(512)")
                         .HasColumnName("AadhaarEncrypted");
 
+                    b.Property<string>("Availability")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -587,6 +705,15 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<double?>("LastKnownLatitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("LastKnownLongitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTimeOffset?>("LastLocationAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Licence")
                         .IsRequired()
@@ -614,6 +741,8 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Availability");
 
                     b.HasIndex("Licence")
                         .IsUnique();
@@ -662,6 +791,10 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("Mobile");
 
+                    b.Property<string>("PhotoUrl")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
                     b.Property<string>("PreferredLanguage")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -705,10 +838,22 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<decimal?>("DistanceKm")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.Property<int?>("EstimatedDurationMinutes")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<string>("PickupAreaType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<Guid>("ShipperId")
                         .HasColumnType("uuid");
@@ -801,6 +946,9 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<double?>("BatteryLevel")
+                        .HasColumnType("double precision");
+
                     b.Property<DateTimeOffset>("CapturedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -815,6 +963,11 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset>("RecordedAtUtc")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<Guid>("TripId")
                         .HasColumnType("uuid");
@@ -861,6 +1014,9 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<bool>("DeliveryAutoConfirmed")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("DriverProfileId")
                         .HasColumnType("uuid");
 
@@ -869,13 +1025,22 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
 
+                    b.Property<Guid?>("LoadId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("PickupAutoConfirmed")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTimeOffset?>("StartedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<DateTimeOffset>("StatusChangedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTimeOffset?>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -894,6 +1059,8 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CarrierId");
+
+                    b.HasIndex("LoadId");
 
                     b.HasIndex("Status");
 
@@ -1109,6 +1276,42 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("RecipientUserProfileId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReturnLoad.Domain.Bookings.BookingRequest", b =>
+                {
+                    b.HasOne("ReturnLoad.Domain.Identity.Carrier", null)
+                        .WithMany()
+                        .HasForeignKey("CarrierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ReturnLoad.Domain.Identity.DriverProfile", null)
+                        .WithMany()
+                        .HasForeignKey("DriverProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ReturnLoad.Domain.Loads.Load", null)
+                        .WithMany()
+                        .HasForeignKey("LoadId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ReturnLoad.Domain.Fleet.Vehicle", null)
+                        .WithMany()
+                        .HasForeignKey("VehicleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ReturnLoad.Domain.Documents.DocumentReview", b =>
+                {
+                    b.HasOne("ReturnLoad.Domain.Documents.Document", null)
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -1407,6 +1610,11 @@ namespace ReturnLoad.Infrastructure.Persistence.Migrations
                         .HasForeignKey("DriverProfileId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("ReturnLoad.Domain.Loads.Load", null)
+                        .WithMany()
+                        .HasForeignKey("LoadId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("ReturnLoad.Domain.Fleet.Vehicle", null)
                         .WithMany()

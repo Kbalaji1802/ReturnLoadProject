@@ -32,10 +32,10 @@ A Return Leg is eligible for a Load **only if every one of these is true**:
 |---|--------|------|
 | 1 | **Compatible vehicle type** | The vehicle type supports the load's cargo type (e.g. reefer for perishables, open/flatbed for construction material). |
 | 2 | **Sufficient payload capacity** | `vehicle.availableCapacity ≥ load.weight` **and** load dimensions fit the vehicle. |
-| 3 | **Pickup within X km** | The load's pickup point is within **X km** of the return leg's route/origin corridor. |
+| 3 | **Pickup within X km** | The load's pickup point is within **X km** of the driver's current location. **X is resolved per pickup area type** — Urban 5 / Suburban 10 / Highway 25 km (config `Matching:*RadiusKm`, ADR-0020). This is a **hard exclusion**, not a ranking penalty: a driver beyond the radius does not see the load, and a driver with no known location sees nothing (a radius cannot be honoured without a position). |
 | 4 | **Delivery along intended route** | The load's destination lies along the return leg's intended route corridor (not a detour beyond tolerance). |
 | 5 | **Pickup time within Y hours** | The load's pickup window overlaps the return leg's availability within **Y hours**. |
-| 6 | **Driver status = Available** | The driver is not already booked, off-duty, or in-transit on another load. |
+| 6 | **Driver status = Available** | The driver's **operational availability** is `Available` (ADR-0020) — not Busy (on a trip), Offline, OnLeave, or in VehicleService. Availability is distinct from verification; a status change takes effect on the next match query. |
 | 7 | **Driver verified** | Driver KYC + DL are `VERIFIED` and not expired (see `08_TRUST_AND_SAFETY.md`). |
 | 8 | **Vehicle verified** | RC + insurance + permit are `VERIFIED` and not expired. |
 

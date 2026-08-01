@@ -67,6 +67,60 @@ public sealed class IdentityTests
     }
 
     [Fact]
+    public void DriverProfile_registers_offline_and_not_available_for_loads()
+    {
+        DriverProfile driver = DriverProfile.Register(Guid.NewGuid(), Licence());
+
+        Assert.Equal(DriverAvailability.Offline, driver.Availability);
+        Assert.False(driver.IsAvailableForLoads); // offline, and not yet verified
+    }
+
+    [Fact]
+    public void DriverProfile_is_available_for_loads_only_when_verified_and_available()
+    {
+        DriverProfile driver = DriverProfile.Register(Guid.NewGuid(), Licence());
+
+        driver.SetAvailability(DriverAvailability.Available);
+        Assert.False(driver.IsAvailableForLoads); // available but not verified
+
+        driver.MarkVerified();
+        Assert.True(driver.IsAvailableForLoads); // verified AND available
+        Assert.Contains(driver.DomainEvents, e => e is DriverAvailabilityChanged);
+    }
+
+    [Fact]
+    public void DriverProfile_busy_cannot_be_set_manually()
+    {
+        DriverProfile driver = DriverProfile.Register(Guid.NewGuid(), Licence());
+        Assert.Throws<DomainException>(() => driver.SetAvailability(DriverAvailability.Busy));
+    }
+
+    [Fact]
+    public void DriverProfile_markbusy_then_release_returns_to_available()
+    {
+        DriverProfile driver = DriverProfile.Register(Guid.NewGuid(), Licence());
+        driver.MarkVerified();
+        driver.SetAvailability(DriverAvailability.Available);
+
+        driver.MarkBusy();
+        Assert.Equal(DriverAvailability.Busy, driver.Availability);
+        Assert.False(driver.IsAvailableForLoads); // busy drivers never receive new loads
+
+        driver.ReleaseFromTrip();
+        Assert.Equal(DriverAvailability.Available, driver.Availability);
+    }
+
+    [Fact]
+    public void DriverProfile_release_does_not_override_driver_chosen_offline()
+    {
+        DriverProfile driver = DriverProfile.Register(Guid.NewGuid(), Licence());
+        driver.SetAvailability(DriverAvailability.OnLeave);
+
+        driver.ReleaseFromTrip(); // only transitions out of Busy — leave stays put
+        Assert.Equal(DriverAvailability.OnLeave, driver.Availability);
+    }
+
+    [Fact]
     public void Carrier_registers_pending_and_blocks_activation_when_blocked()
     {
         Carrier carrier = Carrier.Register("Anna Transports", MobileNumber.Create("9876543210"));

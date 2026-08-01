@@ -9,9 +9,11 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
 
+import { Router } from '@angular/router';
+
 import { ApiService } from '../../core/api/api.service';
 import { DriverSummary } from '../../core/api/api.models';
-import { DRIVER_STATUS, label } from '../../core/api/enums';
+import { DRIVER_STATUS, DRIVER_AVAILABILITY, label } from '../../core/api/enums';
 import { PageHeader } from '../../shared/ui/page-header';
 import { StatusChip } from '../../shared/ui/status-chip';
 import { EmptyState } from '../../shared/ui/empty-state';
@@ -50,20 +52,28 @@ import { EmptyState } from '../../shared/ui/empty-state';
           <rl-empty-state icon="badge" title="No drivers found" message="Try clearing the search or filter." />
         } @else {
           <table mat-table [dataSource]="paged()" class="rl-table">
+            <ng-container matColumnDef="driver">
+              <th mat-header-cell *matHeaderCellDef>Driver</th>
+              <td mat-cell *matCellDef="let d">{{ d.fullName ?? '—' }}</td>
+            </ng-container>
             <ng-container matColumnDef="licence">
               <th mat-header-cell *matHeaderCellDef>Licence</th>
               <td mat-cell *matCellDef="let d">{{ d.licence }}</td>
+            </ng-container>
+            <ng-container matColumnDef="availability">
+              <th mat-header-cell *matHeaderCellDef>Availability</th>
+              <td mat-cell *matCellDef="let d">{{ availability(d.availability) }}</td>
             </ng-container>
             <ng-container matColumnDef="status">
               <th mat-header-cell *matHeaderCellDef>Status</th>
               <td mat-cell *matCellDef="let d"><rl-status-chip [label]="driverStatus(d.status)" /></td>
             </ng-container>
-            <ng-container matColumnDef="id">
-              <th mat-header-cell *matHeaderCellDef>Driver id</th>
-              <td mat-cell *matCellDef="let d" class="mono">{{ d.id }}</td>
+            <ng-container matColumnDef="open">
+              <th mat-header-cell *matHeaderCellDef></th>
+              <td mat-cell *matCellDef="let d" class="right"><mat-icon>chevron_right</mat-icon></td>
             </ng-container>
             <tr mat-header-row *matHeaderRowDef="cols"></tr>
-            <tr mat-row *matRowDef="let row; columns: cols"></tr>
+            <tr mat-row *matRowDef="let row; columns: cols" class="clickable" (click)="open(row.id)"></tr>
           </table>
           <mat-paginator [length]="filtered().length" [pageSize]="pageSize()"
             [pageSizeOptions]="[5, 10, 25]" (page)="onPage($event)" showFirstLastButtons />
@@ -71,11 +81,17 @@ import { EmptyState } from '../../shared/ui/empty-state';
       </div>
     </div>
   `,
-  styles: [`.search { min-width: 280px; } .mono { font-family: ui-monospace, monospace; font-size: 0.8rem; color: var(--mat-sys-on-surface-variant); }`],
+  styles: [`
+    .search { min-width: 280px; }
+    .right { text-align: right; }
+    tr.clickable { cursor: pointer; }
+    tr.clickable:hover td { background: var(--mat-sys-surface-container-high); }
+  `],
 })
 export class Drivers {
   private readonly api = inject(ApiService);
-  protected readonly cols = ['licence', 'status', 'id'];
+  private readonly router = inject(Router);
+  protected readonly cols = ['driver', 'licence', 'availability', 'status', 'open'];
   protected readonly statuses = [0, 1, 2, 3];
 
   protected readonly loading = signal(true);
@@ -89,7 +105,8 @@ export class Drivers {
     const q = this.query().trim().toLowerCase();
     const s = this.statusFilter();
     return this.all().filter(
-      (d) => (s === -1 || d.status === s) && (q === '' || d.licence.toLowerCase().includes(q) || d.id.includes(q)),
+      (d) => (s === -1 || d.status === s) &&
+        (q === '' || d.licence.toLowerCase().includes(q) || d.id.includes(q) || (d.fullName ?? '').toLowerCase().includes(q)),
     );
   });
 
@@ -103,6 +120,8 @@ export class Drivers {
   }
 
   protected driverStatus = (v: number) => label(DRIVER_STATUS, v);
+  protected availability = (v: number) => label(DRIVER_AVAILABILITY, v);
+  protected open(id: string) { this.router.navigate(['/drivers', id]); }
   protected onQuery(v: string) { this.query.set(v); this.pageIndex.set(0); }
   protected onStatus(v: number) { this.statusFilter.set(v); this.pageIndex.set(0); }
   protected onPage(e: PageEvent) { this.pageIndex.set(e.pageIndex); this.pageSize.set(e.pageSize); }

@@ -15,6 +15,7 @@ public sealed class UserProfileConfiguration : AggregateConfiguration<UserProfil
         builder.Property(u => u.AuthUserId).IsRequired();
         builder.Property(u => u.FullName).HasMaxLength(200).IsRequired();
         builder.Property(u => u.PreferredLanguage).HasConversion<string>().HasMaxLength(16);
+        builder.Property(u => u.PhotoUrl).HasMaxLength(512);
         builder.Property(u => u.CreatedAtUtc).IsRequired();
 
         builder.Property(u => u.Mobile)

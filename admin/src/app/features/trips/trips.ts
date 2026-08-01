@@ -1,11 +1,15 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
+import { RouterLink, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatSelectModule } from '@angular/material/select';
+import { MatTableModule } from '@angular/material/table';
 
 import { ApiService } from '../../core/api/api.service';
 import { TRIP_STATUS, label } from '../../core/api/enums';
@@ -14,103 +18,133 @@ import { StatusChip } from '../../shared/ui/status-chip';
 import { EmptyState } from '../../shared/ui/empty-state';
 
 interface TripView {
-  id: string;
-  carrierId: string;
-  vehicleId: string;
-  driverProfileId: string;
-  status: number;
-  startedAtUtc: string | null;
-  completedAtUtc: string | null;
+  readonly id: string;
+  readonly carrierId: string;
+  readonly vehicleId: string;
+  readonly driverProfileId: string;
+  readonly status: number;
+  readonly startedAtUtc: string | null;
+  readonly completedAtUtc: string | null;
 }
 
 @Component({
   selector: 'app-trips',
   imports: [
-    FormsModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule,
-    MatProgressBarModule, PageHeader, StatusChip, EmptyState,
+    DatePipe, RouterLink, FormsModule, MatTableModule, MatPaginatorModule, MatFormFieldModule, MatInputModule,
+    MatSelectModule, MatButtonModule, MatIconModule, MatProgressBarModule, PageHeader, StatusChip, EmptyState,
   ],
   template: `
     <div class="rl-page">
-      <rl-page-header title="Trips" subtitle="Look up a trip and advance its lifecycle" />
+      <rl-page-header title="Trips" subtitle="Every trip and its lifecycle status">
+        <button actions mat-stroked-button (click)="load()"><mat-icon>refresh</mat-icon> Refresh</button>
+      </rl-page-header>
 
       <div class="rl-toolbar">
         <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search">
-          <mat-icon matPrefix>tag</mat-icon>
-          <mat-label>Trip id</mat-label>
-          <input matInput [(ngModel)]="tripId" placeholder="paste a trip GUID" />
+          <mat-icon matPrefix>search</mat-icon>
+          <mat-label>Search trip / driver / vehicle id</mat-label>
+          <input matInput [ngModel]="query()" (ngModelChange)="onQuery($event)" />
         </mat-form-field>
-        <button mat-flat-button (click)="load()" [disabled]="!tripId || loading()">
-          <mat-icon>search</mat-icon> View
-        </button>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Status</mat-label>
+          <mat-select [ngModel]="statusFilter()" (ngModelChange)="onStatus($event)">
+            <mat-option [value]="-1">All</mat-option>
+            @for (s of statuses; track s) { <mat-option [value]="s">{{ tripStatus(s) }}</mat-option> }
+          </mat-select>
+        </mat-form-field>
       </div>
 
-      @if (loading()) { <mat-progress-bar mode="indeterminate" /> }
-
-      @if (trip(); as t) {
-        <div class="rl-surface detail">
-          <div class="row">
-            <div>
-              <div class="muted">Trip</div>
-              <div class="mono">{{ t.id }}</div>
-            </div>
-            <rl-status-chip [label]="tripStatus(t.status)" />
-          </div>
-          <div class="grid">
-            <div><div class="muted">Vehicle</div><div class="mono">{{ t.vehicleId }}</div></div>
-            <div><div class="muted">Driver</div><div class="mono">{{ t.driverProfileId }}</div></div>
-            <div><div class="muted">Started</div><div>{{ t.startedAtUtc ?? '—' }}</div></div>
-            <div><div class="muted">Completed</div><div>{{ t.completedAtUtc ?? '—' }}</div></div>
-          </div>
-          <div class="actions">
-            <button mat-stroked-button (click)="advance('Assigned')">Assign</button>
-            <button mat-stroked-button (click)="advance('Started')">Start</button>
-            <button mat-stroked-button (click)="advance('InTransit')">In transit</button>
-            <button mat-flat-button (click)="advance('Completed')"><mat-icon>flag</mat-icon> Complete</button>
-          </div>
-        </div>
-      } @else if (!loading()) {
-        <div class="rl-surface">
-          <rl-empty-state icon="local_shipping" title="No trip loaded"
-            message="Enter a trip id above to view status and tracking." />
-        </div>
-      }
+      <div class="rl-surface">
+        @if (busy()) { <mat-progress-bar mode="indeterminate" /> }
+        @if (!busy() && filtered().length === 0) {
+          <rl-empty-state icon="local_shipping" title="No trips" message="Trips appear once load owners approve drivers." />
+        } @else {
+          <table mat-table [dataSource]="paged()" class="rl-table">
+            <ng-container matColumnDef="id">
+              <th mat-header-cell *matHeaderCellDef>Trip</th>
+              <td mat-cell *matCellDef="let t" class="mono">{{ t.id.slice(0, 8) }}…</td>
+            </ng-container>
+            <ng-container matColumnDef="status">
+              <th mat-header-cell *matHeaderCellDef>Status</th>
+              <td mat-cell *matCellDef="let t"><rl-status-chip [label]="tripStatus(t.status)" /></td>
+            </ng-container>
+            <ng-container matColumnDef="driver">
+              <th mat-header-cell *matHeaderCellDef>Driver</th>
+              <td mat-cell *matCellDef="let t" class="mono">{{ t.driverProfileId.slice(0, 8) }}…</td>
+            </ng-container>
+            <ng-container matColumnDef="vehicle">
+              <th mat-header-cell *matHeaderCellDef>Vehicle</th>
+              <td mat-cell *matCellDef="let t" class="mono">{{ t.vehicleId.slice(0, 8) }}…</td>
+            </ng-container>
+            <ng-container matColumnDef="started">
+              <th mat-header-cell *matHeaderCellDef>Started</th>
+              <td mat-cell *matCellDef="let t">{{ t.startedAtUtc ? (t.startedAtUtc | date: 'short') : '—' }}</td>
+            </ng-container>
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef></th>
+              <td mat-cell *matCellDef="let t" class="right">
+                <a mat-stroked-button [routerLink]="['/tracking', t.id]" (click)="$event.stopPropagation()"><mat-icon>my_location</mat-icon> Track</a>
+                <mat-icon class="chev">chevron_right</mat-icon>
+              </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="cols"></tr>
+            <tr mat-row *matRowDef="let row; columns: cols" class="clickable" (click)="open(row.id)"></tr>
+          </table>
+          <mat-paginator [length]="filtered().length" [pageSize]="pageSize()"
+            [pageSizeOptions]="[5, 10, 25]" (page)="onPage($event)" showFirstLastButtons />
+        }
+      </div>
     </div>
   `,
-  styles: [
-    `
-      .search { min-width: 360px; }
-      .detail { padding: 24px; }
-      .row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 20px; }
-      .muted { color: var(--mat-sys-on-surface-variant); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
-      .mono { font-family: ui-monospace, monospace; font-size: 0.85rem; }
-      .actions { display: flex; gap: 10px; flex-wrap: wrap; }
-    `,
-  ],
+  styles: [`
+    .search { min-width: 300px; } .mono { font-family: ui-monospace, monospace; font-size: 0.8rem; color: var(--mat-sys-on-surface-variant); }
+    .right { text-align: right; white-space: nowrap; }
+    .chev { vertical-align: middle; color: var(--mat-sys-on-surface-variant); margin-left: 4px; }
+    tr.clickable { cursor: pointer; } tr.clickable:hover td { background: var(--mat-sys-surface-container-high); }
+  `],
 })
 export class Trips {
   private readonly api = inject(ApiService);
-  private readonly snack = inject(MatSnackBar);
+  private readonly router = inject(Router);
+  protected readonly cols = ['id', 'status', 'driver', 'vehicle', 'started', 'actions'];
+  protected readonly statuses = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-  protected tripId = '';
-  protected readonly loading = signal(false);
-  protected readonly trip = signal<TripView | null>(null);
+  protected readonly busy = signal(true);
+  protected readonly all = signal<TripView[]>([]);
+  protected readonly query = signal('');
+  protected readonly statusFilter = signal(-1);
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(10);
 
-  protected tripStatus = (v: number) => label(TRIP_STATUS, v);
+  protected readonly filtered = computed(() => {
+    const q = this.query().trim().toLowerCase();
+    const s = this.statusFilter();
+    return this.all().filter(
+      (t) => (s === -1 || t.status === s) &&
+        (q === '' || t.id.includes(q) || t.driverProfileId.includes(q) || t.vehicleId.includes(q)),
+    );
+  });
 
-  protected load(): void {
-    this.loading.set(true);
-    this.api.get<TripView>(`trips/${this.tripId.trim()}`).subscribe({
-      next: (t) => { this.trip.set(t); this.loading.set(false); },
-      error: () => { this.trip.set(null); this.loading.set(false); this.snack.open('Trip not found.', 'OK', { duration: 3000 }); },
-    });
+  protected readonly paged = computed(() => {
+    const start = this.pageIndex() * this.pageSize();
+    return this.filtered().slice(start, start + this.pageSize());
+  });
+
+  constructor() {
+    this.load();
   }
 
-  protected advance(target: string): void {
-    this.loading.set(true);
-    this.api.post(`trips/${this.tripId.trim()}/status/${target}`, {}).subscribe({
-      next: () => { this.snack.open(`Trip ${target}.`, 'OK', { duration: 2500 }); this.load(); },
-      error: () => { this.loading.set(false); this.snack.open('Transition not allowed in the current state.', 'OK', { duration: 3500 }); },
+  protected tripStatus = (v: number) => label(TRIP_STATUS, v);
+  protected open(id: string) { this.router.navigate(['/trips', id]); }
+  protected onQuery(v: string) { this.query.set(v); this.pageIndex.set(0); }
+  protected onStatus(v: number) { this.statusFilter.set(v); this.pageIndex.set(0); }
+  protected onPage(e: PageEvent) { this.pageIndex.set(e.pageIndex); this.pageSize.set(e.pageSize); }
+
+  protected load(): void {
+    this.busy.set(true);
+    this.api.get<TripView[]>('trips').subscribe({
+      next: (t) => { this.all.set(t); this.busy.set(false); },
+      error: () => this.busy.set(false),
     });
   }
 }

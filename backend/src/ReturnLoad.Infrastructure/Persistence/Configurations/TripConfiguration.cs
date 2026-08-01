@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using ReturnLoad.Domain.Fleet;
 using ReturnLoad.Domain.Identity;
+using ReturnLoad.Domain.Loads;
 using ReturnLoad.Domain.Trips;
 
 namespace ReturnLoad.Infrastructure.Persistence.Configurations;
@@ -16,10 +17,15 @@ public sealed class TripConfiguration : AggregateConfiguration<Trip>
         builder.Property(t => t.CarrierId).IsRequired();
         builder.Property(t => t.VehicleId).IsRequired();
         builder.Property(t => t.DriverProfileId).IsRequired();
-        builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(16).IsRequired();
+        // 24 chars holds the longest lifecycle name ("ArrivedDestination" = 18) (M4.3 Step 5).
+        builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(24).IsRequired();
+        builder.Property(t => t.LoadId);
         builder.Property(t => t.CreatedAtUtc).IsRequired();
         builder.Property(t => t.StartedAtUtc);
         builder.Property(t => t.CompletedAtUtc);
+        builder.Property(t => t.StatusChangedAtUtc).IsRequired();
+        builder.Property(t => t.PickupAutoConfirmed).IsRequired();
+        builder.Property(t => t.DeliveryAutoConfirmed).IsRequired();
 
         builder.OwnsOne(t => t.Origin, o => OwnedConfig.Location(o, "Origin"));
         builder.OwnsOne(t => t.Destination, d => OwnedConfig.Location(d, "Destination"));
@@ -33,8 +39,10 @@ public sealed class TripConfiguration : AggregateConfiguration<Trip>
         builder.HasOne<Carrier>().WithMany().HasForeignKey(t => t.CarrierId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Vehicle>().WithMany().HasForeignKey(t => t.VehicleId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<DriverProfile>().WithMany().HasForeignKey(t => t.DriverProfileId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<Load>().WithMany().HasForeignKey(t => t.LoadId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(t => t.Status);
+        builder.HasIndex(t => t.LoadId);
         builder.HasIndex(t => new { t.DriverProfileId, t.VehicleId }); // driver + vehicle assignment
     }
 }

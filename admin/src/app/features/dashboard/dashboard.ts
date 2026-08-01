@@ -6,8 +6,8 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { RouterLink } from '@angular/router';
 
 import { ApiService } from '../../core/api/api.service';
-import { DriverSummary, DocumentView, LoadView } from '../../core/api/api.models';
-import { CARGO_TYPE, DRIVER_STATUS, LOAD_STATUS, label } from '../../core/api/enums';
+import { DriverSummary, PendingDocumentView, LoadView, VehicleView, TripView } from '../../core/api/api.models';
+import { CARGO_TYPE, DRIVER_STATUS, LOAD_STATUS, isRunningTrip, label } from '../../core/api/enums';
 import { PageHeader } from '../../shared/ui/page-header';
 import { StatCard } from '../../shared/ui/stat-card';
 import { StatusChip } from '../../shared/ui/status-chip';
@@ -28,13 +28,19 @@ import { EmptyState } from '../../shared/ui/empty-state';
       @if (loading()) { <mat-progress-bar mode="indeterminate" /> }
 
       <section class="rl-stat-grid">
-        <rl-stat-card icon="badge" [value]="drivers().length" label="Total drivers"
-          [hint]="activeDrivers() + ' active'" />
-        <rl-stat-card icon="verified" [value]="pendingDocs().length" label="Documents pending review"
+        <rl-stat-card icon="person_add" [value]="pendingDrivers()" label="Pending drivers"
+          [hint]="drivers().length + ' total · ' + activeDrivers() + ' active'"
           tint="color-mix(in srgb, #d97706 16%, transparent)" />
-        <rl-stat-card icon="inventory_2" [value]="loads().length" label="Available loads"
+        <rl-stat-card icon="local_shipping" [value]="pendingVehicles()" label="Pending vehicles"
+          [hint]="vehicles().length + ' total'"
+          tint="color-mix(in srgb, #d97706 16%, transparent)" />
+        <rl-stat-card icon="fact_check" [value]="pendingDocs().length" label="Pending documents"
+          tint="color-mix(in srgb, #d97706 16%, transparent)" />
+        <rl-stat-card icon="commute" [value]="runningTrips()" label="Running trips"
+          [hint]="trips().length + ' total'"
           tint="color-mix(in srgb, #16a34a 16%, transparent)" />
-        <rl-stat-card icon="local_shipping" [value]="activeDrivers()" label="Verified &amp; ready"
+        <rl-stat-card icon="inventory_2" [value]="openLoads()" label="Open loads"
+          [hint]="loads().length + ' total'"
           tint="color-mix(in srgb, var(--mat-sys-tertiary) 18%, transparent)" />
       </section>
 
@@ -97,9 +103,15 @@ export class Dashboard {
   protected readonly loading = signal(true);
   protected readonly drivers = signal<DriverSummary[]>([]);
   protected readonly loads = signal<LoadView[]>([]);
-  protected readonly pendingDocs = signal<DocumentView[]>([]);
+  protected readonly pendingDocs = signal<PendingDocumentView[]>([]);
+  protected readonly vehicles = signal<VehicleView[]>([]);
+  protected readonly trips = signal<TripView[]>([]);
 
   protected readonly activeDrivers = computed(() => this.drivers().filter((d) => d.status === 1).length);
+  protected readonly pendingDrivers = computed(() => this.drivers().filter((d) => d.status === 0).length);
+  protected readonly pendingVehicles = computed(() => this.vehicles().filter((v) => v.status === 0).length);
+  protected readonly runningTrips = computed(() => this.trips().filter((t) => isRunningTrip(t.status)).length);
+  protected readonly openLoads = computed(() => this.loads().filter((l) => l.status === 1).length);
   protected readonly recentLoads = computed(() => this.loads().slice(0, 5));
 
   constructor() {
@@ -115,12 +127,16 @@ export class Dashboard {
     forkJoin({
       drivers: this.api.get<DriverSummary[]>('drivers'),
       loads: this.api.get<LoadView[]>('loads/available'),
-      docs: this.api.get<DocumentView[]>('documents/pending'),
+      docs: this.api.get<PendingDocumentView[]>('documents/pending'),
+      vehicles: this.api.get<VehicleView[]>('vehicles'),
+      trips: this.api.get<TripView[]>('trips'),
     }).subscribe({
-      next: ({ drivers, loads, docs }) => {
+      next: ({ drivers, loads, docs, vehicles, trips }) => {
         this.drivers.set(drivers);
         this.loads.set(loads);
         this.pendingDocs.set(docs);
+        this.vehicles.set(vehicles);
+        this.trips.set(trips);
         this.loading.set(false);
       },
       error: () => this.loading.set(false),

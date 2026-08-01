@@ -19,6 +19,12 @@ public sealed class RegisterRequestValidator : AbstractValidator<RegisterRequest
             .NotEmpty().WithErrorCode("VALIDATION_ERROR")
             .EmailAddress().WithErrorCode("INVALID_EMAIL");
 
+        // The public may only register as one of the two marketplace sides (M4.2). An
+        // out-of-range value (e.g. an attempt to smuggle an internal role) is rejected here.
+        RuleFor(request => request.AccountType)
+            .IsInEnum().WithErrorCode("INVALID_ACCOUNT_TYPE")
+            .WithMessage("Choose a valid account type (Driver or Load Owner).");
+
         RuleFor(request => request.Password)
             .NotEmpty().WithErrorCode("VALIDATION_ERROR")
             .MinimumLength(policy.MinLength).WithErrorCode("PASSWORD_TOO_SHORT")

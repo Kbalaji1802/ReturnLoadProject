@@ -1,6 +1,8 @@
 using ReturnLoad.Application.Abstractions.Persistence;
+using ReturnLoad.Application.UseCases.Reviews;
 using ReturnLoad.Domain.Fleet;
 using ReturnLoad.Domain.Identity;
+using ReturnLoad.Domain.Trips;
 using ReturnLoad.Domain.ValueObjects;
 using ReturnLoad.Shared.Results;
 
@@ -15,10 +17,42 @@ public sealed record RegisterDriverRequest(
 
 public sealed record DriverRegistrationResult(Guid DriverProfileId, Guid UserProfileId);
 
-public sealed record DriverSummary(Guid Id, Guid UserProfileId, string Licence, DriverStatus Status);
+public sealed record DriverSummary(
+    Guid Id, Guid UserProfileId, string? FullName, string Licence, DriverStatus Status, DriverAvailability Availability);
+
+/// <summary>
+/// A driver changes their operational availability (Part 3), optionally sharing their current GPS
+/// location so matching (radius) and the load owner (distance/ETA) have a fresh position (Part 7).
+/// </summary>
+public sealed record SetDriverAvailabilityRequest(DriverAvailability Availability, double? Latitude = null, double? Longitude = null);
 
 public sealed record RegisterVehicleRequest(
     Guid CarrierId, string RegistrationNumber, VehicleType Type, decimal MaxPayloadKg, decimal? VolumeCubicMetres);
+
+/// <summary>A driver registers a vehicle into their own fleet (no carrier id — resolved server-side).</summary>
+public sealed record RegisterDriverVehicleRequest(
+    string RegistrationNumber, VehicleType Type, decimal MaxPayloadKg, decimal? VolumeCubicMetres);
+
+public sealed record VehicleView(
+    Guid Id, Guid CarrierId, string RegistrationNumber, VehicleType Type, decimal MaxPayloadKg, VehicleStatus Status);
+
+/// <summary>A vehicle with its owner/company resolved, for the admin vehicle-details page (Part 11).</summary>
+public sealed record VehicleDetailView(
+    Guid Id, string RegistrationNumber, VehicleType Type, decimal MaxPayloadKg, decimal? VolumeCubicMetres,
+    VehicleStatus Status, Guid CarrierId, string? Company, DateTimeOffset CreatedAtUtc);
+
+/// <summary>
+/// The full driver profile for the admin driver-details page (Part 11): identity + contact + photo,
+/// verification + availability, rating, completed trips, current trip, company, last-known location,
+/// and the driver's vehicles. Documents/reviews are fetched via their own endpoints.
+/// </summary>
+public sealed record DriverDetailView(
+    Guid Id, Guid UserProfileId, string FullName, string Mobile, string? Email, string? PhotoUrl,
+    DriverStatus Status, DriverAvailability Availability, string Licence,
+    double? Rating, int RatingCount, int CompletedTrips,
+    Guid? CurrentTripId, TripStatus? CurrentTripStatus,
+    string? Company, double? LastKnownLatitude, double? LastKnownLongitude,
+    IReadOnlyList<VehicleView> Vehicles);
 
 // ---- Carrier ----------------------------------------------------------------
 
@@ -59,6 +93,23 @@ public interface IDriverOnboardingService
 
     /// <summary>Lists drivers (Operations view — e.g. verification queue).</summary>
     Task<Result<IReadOnlyList<DriverSummary>>> ListAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The caller's own driver profile, resolved from their authenticated user id. Lets a
+    /// driver client obtain <b>its own</b> id (e.g. to scope document uploads) instead of
+    /// guessing from the drivers list — closing the cross-user attachment hole (M4.2 §8 S1).
+    /// </summary>
+    Task<Result<DriverSummary>> GetForUserAsync(Guid authUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The driver sets their operational availability (Part 3). Takes effect on the next match
+    /// query. <see cref="DriverAvailability.Busy"/> cannot be set manually — it is system-managed.
+    /// </summary>
+    Task<Result<DriverSummary>> SetAvailabilityAsync(
+        Guid authUserId, DriverAvailability target, double? latitude = null, double? longitude = null, CancellationToken cancellationToken = default);
+
+    /// <summary>The full driver profile for the admin driver-details page (Part 11).</summary>
+    Task<Result<DriverDetailView>> GetDetailAsync(Guid driverProfileId, CancellationToken cancellationToken = default);
 }
 
 internal sealed class DriverOnboardingService : IDriverOnboardingService
@@ -67,6 +118,9 @@ internal sealed class DriverOnboardingService : IDriverOnboardingService
     private readonly IRepository<DriverProfile> _drivers;
     private readonly IRepository<Association> _associations;
     private readonly IRepository<Carrier> _carriers;
+    private readonly IRepository<Vehicle> _vehicles;
+    private readonly IRepository<Trip> _trips;
+    private readonly IReviewService _reviews;
     private readonly IUnitOfWork _uow;
 
     public DriverOnboardingService(
@@ -74,12 +128,18 @@ internal sealed class DriverOnboardingService : IDriverOnboardingService
         IRepository<DriverProfile> drivers,
         IRepository<Association> associations,
         IRepository<Carrier> carriers,
+        IRepository<Vehicle> vehicles,
+        IRepository<Trip> trips,
+        IReviewService reviews,
         IUnitOfWork uow)
     {
         _users = users;
         _drivers = drivers;
         _associations = associations;
         _carriers = carriers;
+        _vehicles = vehicles;
+        _trips = trips;
+        _reviews = reviews;
         _uow = uow;
     }
 
@@ -126,10 +186,98 @@ internal sealed class DriverOnboardingService : IDriverOnboardingService
     public async Task<Result<IReadOnlyList<DriverSummary>>> ListAsync(CancellationToken cancellationToken = default)
     {
         IReadOnlyList<DriverProfile> drivers = await _drivers.ListAsync(_ => true, cancellationToken);
+
+        // Resolve names so the console shows people, not GUIDs (one lookup per distinct user).
+        HashSet<Guid> userIds = [.. drivers.Select(d => d.UserProfileId)];
+        Dictionary<Guid, string> names = [];
+        foreach (Guid uid in userIds)
+        {
+            UserProfile? u = await _users.GetByIdAsync(uid, cancellationToken);
+            if (u is not null)
+            {
+                names[uid] = u.FullName;
+            }
+        }
+
         IReadOnlyList<DriverSummary> summaries = drivers
-            .Select(d => new DriverSummary(d.Id, d.UserProfileId, d.Licence.Value, d.Status))
+            .Select(d => new DriverSummary(d.Id, d.UserProfileId, names.GetValueOrDefault(d.UserProfileId), d.Licence.Value, d.Status, d.Availability))
             .ToList();
         return Result<IReadOnlyList<DriverSummary>>.Success(summaries);
+    }
+
+    public async Task<Result<DriverSummary>> GetForUserAsync(Guid authUserId, CancellationToken cancellationToken = default)
+    {
+        UserProfile? profile = (await _users.ListAsync(u => u.AuthUserId == authUserId, cancellationToken)).FirstOrDefault();
+        DriverProfile? driver = profile is null
+            ? null
+            : (await _drivers.ListAsync(d => d.UserProfileId == profile.Id, cancellationToken)).FirstOrDefault();
+
+        return driver is null
+            ? Error.NotFound("This account does not have a driver profile yet.")
+            : new DriverSummary(driver.Id, driver.UserProfileId, profile?.FullName, driver.Licence.Value, driver.Status, driver.Availability);
+    }
+
+    public async Task<Result<DriverSummary>> SetAvailabilityAsync(
+        Guid authUserId, DriverAvailability target, double? latitude = null, double? longitude = null, CancellationToken cancellationToken = default)
+    {
+        UserProfile? profile = (await _users.ListAsync(u => u.AuthUserId == authUserId, cancellationToken)).FirstOrDefault();
+        DriverProfile? driver = profile is null
+            ? null
+            : (await _drivers.ListAsync(d => d.UserProfileId == profile.Id, cancellationToken)).FirstOrDefault();
+        if (driver is null)
+        {
+            return Error.NotFound("This account does not have a driver profile yet.");
+        }
+
+        driver.SetAvailability(target);
+        if (latitude is double lat && longitude is double lng)
+        {
+            driver.RecordLocation(lat, lng, DateTimeOffset.UtcNow);
+        }
+
+        _drivers.Update(driver);
+        await _uow.SaveChangesAsync(cancellationToken);
+        return new DriverSummary(driver.Id, driver.UserProfileId, profile?.FullName, driver.Licence.Value, driver.Status, driver.Availability);
+    }
+
+    public async Task<Result<DriverDetailView>> GetDetailAsync(Guid driverProfileId, CancellationToken cancellationToken = default)
+    {
+        DriverProfile? driver = await _drivers.GetByIdAsync(driverProfileId, cancellationToken);
+        if (driver is null)
+        {
+            return Error.NotFound("Driver not found.");
+        }
+
+        UserProfile? user = await _users.GetByIdAsync(driver.UserProfileId, cancellationToken);
+
+        RatingSummary rating = await _reviews.GetSummaryAsync(driver.UserProfileId, cancellationToken);
+
+        IReadOnlyList<Trip> trips = await _trips.ListAsync(t => t.DriverProfileId == driver.Id, cancellationToken);
+        int completedTrips = trips.Count(t => t.Status == TripStatus.Completed);
+        Trip? currentTrip = trips.FirstOrDefault(t => t.Status != TripStatus.Completed && t.Status != TripStatus.Cancelled);
+
+        // Company (carrier) + the driver's fleet, via the driver's active association.
+        Guid? carrierId = (await _associations.ListAsync(
+            a => a.MemberUserProfileId == driver.UserProfileId && a.Role == AssociationRole.Driver && a.Status != AssociationStatus.Revoked,
+            cancellationToken)).FirstOrDefault()?.CarrierId;
+
+        string? company = null;
+        List<VehicleView> vehicles = [];
+        if (carrierId is Guid cid)
+        {
+            company = (await _carriers.GetByIdAsync(cid, cancellationToken))?.LegalName;
+            vehicles = (await _vehicles.ListAsync(v => v.CarrierId == cid, cancellationToken))
+                .Select(v => new VehicleView(v.Id, v.CarrierId, v.Registration.Value, v.Type, v.Capacity.MaxPayload.Kilograms, v.Status))
+                .ToList();
+        }
+
+        return new DriverDetailView(
+            driver.Id, driver.UserProfileId, user?.FullName ?? "—", user?.Mobile.Value ?? "—", user?.Email?.Value, user?.PhotoUrl,
+            driver.Status, driver.Availability, driver.Licence.Value,
+            rating.Count > 0 ? rating.Average : null, rating.Count, completedTrips,
+            currentTrip?.Id, currentTrip?.Status,
+            company, driver.LastKnownLatitude, driver.LastKnownLongitude,
+            vehicles);
     }
 }
 
@@ -139,19 +287,50 @@ public interface IVehicleService
 {
     Task<Result<Guid>> RegisterAsync(RegisterVehicleRequest request, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// A driver registers a vehicle into their own fleet. If the driver has no carrier yet, an
+    /// owner-operator carrier is created and the driver associated with it (M4.4). Returns the
+    /// new vehicle id.
+    /// </summary>
+    Task<Result<Guid>> RegisterForDriverAsync(Guid authUserId, RegisterDriverVehicleRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>The authenticated driver's fleet vehicles (with verification status).</summary>
+    Task<Result<IReadOnlyList<VehicleView>>> ListForDriverAsync(Guid authUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>Vehicles for the ops/admin console, optionally filtered by status (e.g. pending = Draft).</summary>
+    Task<Result<IReadOnlyList<VehicleView>>> ListByStatusAsync(VehicleStatus? status, CancellationToken cancellationToken = default);
+
     Task<Result> ActivateAsync(Guid vehicleId, bool mandatoryDocumentsValid, CancellationToken cancellationToken = default);
+
+    /// <summary>A vehicle with its owner/company resolved, for the admin vehicle-details page (Part 11).</summary>
+    Task<Result<VehicleDetailView>> GetDetailAsync(Guid vehicleId, CancellationToken cancellationToken = default);
 }
 
 internal sealed class VehicleService : IVehicleService
 {
     private readonly IRepository<Vehicle> _vehicles;
     private readonly IRepository<Carrier> _carriers;
+    private readonly IRepository<UserProfile> _users;
+    private readonly IRepository<DriverProfile> _drivers;
+    private readonly IRepository<Association> _associations;
+    private readonly Notifications.INotificationService _notify;
     private readonly IUnitOfWork _uow;
 
-    public VehicleService(IRepository<Vehicle> vehicles, IRepository<Carrier> carriers, IUnitOfWork uow)
+    public VehicleService(
+        IRepository<Vehicle> vehicles,
+        IRepository<Carrier> carriers,
+        IRepository<UserProfile> users,
+        IRepository<DriverProfile> drivers,
+        IRepository<Association> associations,
+        Notifications.INotificationService notify,
+        IUnitOfWork uow)
     {
         _vehicles = vehicles;
         _carriers = carriers;
+        _users = users;
+        _drivers = drivers;
+        _associations = associations;
+        _notify = notify;
         _uow = uow;
     }
 
@@ -173,6 +352,92 @@ internal sealed class VehicleService : IVehicleService
         return vehicle.Id;
     }
 
+    public async Task<Result<Guid>> RegisterForDriverAsync(Guid authUserId, RegisterDriverVehicleRequest request, CancellationToken cancellationToken = default)
+    {
+        UserProfile? profile = (await _users.ListAsync(u => u.AuthUserId == authUserId, cancellationToken)).FirstOrDefault();
+        DriverProfile? driver = profile is null
+            ? null
+            : (await _drivers.ListAsync(d => d.UserProfileId == profile.Id, cancellationToken)).FirstOrDefault();
+        if (profile is null || driver is null)
+        {
+            return Error.Validation("Register your driver profile before adding a vehicle.");
+        }
+
+        // Resolve the driver's carrier, or create an owner-operator carrier + association.
+        Association? association = (await _associations.ListAsync(
+            a => a.MemberUserProfileId == profile.Id && a.Role == AssociationRole.Driver && a.Status != AssociationStatus.Revoked,
+            cancellationToken)).FirstOrDefault();
+
+        Guid carrierId;
+        if (association is not null)
+        {
+            carrierId = association.CarrierId;
+        }
+        else
+        {
+            Carrier carrier = Carrier.Register($"{profile.FullName} (Owner-Operator)", profile.Mobile);
+            await _carriers.AddAsync(carrier, cancellationToken);
+            await _associations.AddAsync(Association.Create(carrier.Id, profile.Id, AssociationRole.Driver), cancellationToken);
+            carrierId = carrier.Id;
+        }
+
+        Vehicle vehicle = Vehicle.Register(
+            carrierId,
+            VehicleRegistrationNumber.Create(request.RegistrationNumber),
+            request.Type,
+            VehicleCapacity.Create(Weight.FromKilograms(request.MaxPayloadKg), request.VolumeCubicMetres));
+
+        await _vehicles.AddAsync(vehicle, cancellationToken);
+        await _uow.SaveChangesAsync(cancellationToken);
+        return vehicle.Id;
+    }
+
+    public async Task<Result<IReadOnlyList<VehicleView>>> ListForDriverAsync(Guid authUserId, CancellationToken cancellationToken = default)
+    {
+        UserProfile? profile = (await _users.ListAsync(u => u.AuthUserId == authUserId, cancellationToken)).FirstOrDefault();
+        if (profile is null)
+        {
+            return Error.Validation("Register your driver profile first.");
+        }
+
+        HashSet<Guid> carrierIds = [.. (await _associations.ListAsync(
+            a => a.MemberUserProfileId == profile.Id && a.Role == AssociationRole.Driver && a.Status != AssociationStatus.Revoked,
+            cancellationToken)).Select(a => a.CarrierId)];
+
+        if (carrierIds.Count == 0)
+        {
+            return Result<IReadOnlyList<VehicleView>>.Success([]);
+        }
+
+        IReadOnlyList<Vehicle> vehicles = await _vehicles.ListAsync(v => carrierIds.Contains(v.CarrierId), cancellationToken);
+        return Result<IReadOnlyList<VehicleView>>.Success(vehicles.Select(MapVehicle).ToList());
+    }
+
+    public async Task<Result<IReadOnlyList<VehicleView>>> ListByStatusAsync(VehicleStatus? status, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Vehicle> vehicles = status is VehicleStatus s
+            ? await _vehicles.ListAsync(v => v.Status == s, cancellationToken)
+            : await _vehicles.ListAsync(_ => true, cancellationToken);
+        return Result<IReadOnlyList<VehicleView>>.Success(vehicles.Select(MapVehicle).ToList());
+    }
+
+    private static VehicleView MapVehicle(Vehicle v) =>
+        new(v.Id, v.CarrierId, v.Registration.Value, v.Type, v.Capacity.MaxPayload.Kilograms, v.Status);
+
+    public async Task<Result<VehicleDetailView>> GetDetailAsync(Guid vehicleId, CancellationToken cancellationToken = default)
+    {
+        Vehicle? vehicle = await _vehicles.GetByIdAsync(vehicleId, cancellationToken);
+        if (vehicle is null)
+        {
+            return Error.NotFound("Vehicle not found.");
+        }
+
+        string? company = (await _carriers.GetByIdAsync(vehicle.CarrierId, cancellationToken))?.LegalName;
+        return new VehicleDetailView(
+            vehicle.Id, vehicle.Registration.Value, vehicle.Type, vehicle.Capacity.MaxPayload.Kilograms,
+            vehicle.Capacity.VolumeCubicMetres, vehicle.Status, vehicle.CarrierId, company, vehicle.CreatedAtUtc);
+    }
+
     public async Task<Result> ActivateAsync(Guid vehicleId, bool mandatoryDocumentsValid, CancellationToken cancellationToken = default)
     {
         Vehicle? vehicle = await _vehicles.GetByIdAsync(vehicleId, cancellationToken);
@@ -183,6 +448,16 @@ internal sealed class VehicleService : IVehicleService
 
         vehicle.Activate(mandatoryDocumentsValid);
         _vehicles.Update(vehicle);
+
+        // Notify the carrier's driver(s) that their vehicle is now approved.
+        IReadOnlyList<Association> members = await _associations.ListAsync(
+            a => a.CarrierId == vehicle.CarrierId && a.Role == AssociationRole.Driver && a.Status != AssociationStatus.Revoked,
+            cancellationToken);
+        foreach (Association member in members)
+        {
+            await _notify.NotifyUserAsync(member.MemberUserProfileId, "Vehicle approved", $"Your vehicle {vehicle.Registration.Value} is verified and ready for loads.", cancellationToken);
+        }
+
         await _uow.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

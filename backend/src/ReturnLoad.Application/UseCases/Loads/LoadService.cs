@@ -1,3 +1,4 @@
+using ReturnLoad.Application.Abstractions.Geo;
 using ReturnLoad.Application.Abstractions.Persistence;
 using ReturnLoad.Domain.Identity;
 using ReturnLoad.Domain.Loads;
@@ -10,12 +11,14 @@ public sealed record PostLoadRequest(
     double OriginLat, double OriginLng, string? OriginAddress,
     double DestinationLat, double DestinationLng, string? DestinationAddress,
     DateTimeOffset PickupStart, DateTimeOffset PickupEnd,
-    CargoType CargoType, decimal WeightKg, decimal? OfferedPriceInr);
+    CargoType CargoType, decimal WeightKg, decimal? OfferedPriceInr,
+    AreaType PickupAreaType = AreaType.Suburban);
 
 public sealed record LoadView(
     Guid Id, Guid ShipperId, string? OriginAddress, string? DestinationAddress,
     DateTimeOffset PickupStart, DateTimeOffset PickupEnd, CargoType CargoType,
-    decimal WeightKg, decimal? OfferedPriceInr, LoadStatus Status);
+    decimal WeightKg, decimal? OfferedPriceInr, LoadStatus Status,
+    decimal? DistanceKm, int? EstimatedDurationMinutes, AreaType PickupAreaType);
 
 public interface ILoadService
 {
@@ -23,22 +26,24 @@ public interface ILoadService
 
     Task<Result<IReadOnlyList<LoadView>>> BrowseAvailableAsync(CancellationToken cancellationToken = default);
 
-    Task<Result<LoadView>> GetAsync(Guid loadId, CancellationToken cancellationToken = default);
+    /// <summary>The caller's own loads across every status (Load Owner "My Loads", M4.3 Step 6).</summary>
+    Task<Result<IReadOnlyList<LoadView>>> ListMineAsync(Guid authUserId, CancellationToken cancellationToken = default);
 
-    /// <summary>Accept an available load (proposes + commits it for MVP).</summary>
-    Task<Result> AcceptAsync(Guid loadId, CancellationToken cancellationToken = default);
+    Task<Result<LoadView>> GetAsync(Guid loadId, CancellationToken cancellationToken = default);
 }
 
 internal sealed class LoadService : ILoadService
 {
     private readonly IRepository<Load> _loads;
     private readonly IRepository<UserProfile> _users;
+    private readonly IRouteService _routes;
     private readonly IUnitOfWork _uow;
 
-    public LoadService(IRepository<Load> loads, IRepository<UserProfile> users, IUnitOfWork uow)
+    public LoadService(IRepository<Load> loads, IRepository<UserProfile> users, IRouteService routes, IUnitOfWork uow)
     {
         _loads = loads;
         _users = users;
+        _routes = routes;
         _uow = uow;
     }
 
@@ -56,7 +61,17 @@ internal sealed class LoadService : ILoadService
             Location.Create(GeoCoordinate.Create(request.DestinationLat, request.DestinationLng), request.DestinationAddress),
             TimeWindow.Create(request.PickupStart, request.PickupEnd),
             LoadRequirement.Create(request.CargoType, Weight.FromKilograms(request.WeightKg)),
-            request.OfferedPriceInr is decimal price ? Money.Of(price) : null);
+            request.OfferedPriceInr is decimal price ? Money.Of(price) : null,
+            request.PickupAreaType);
+
+        // The platform computes distance + ETA — the shipper never enters them (M4.3 Step 1).
+        // Fail-soft: if the route provider is unavailable the load still posts (metrics stay null).
+        RouteResult? route = await _routes.GetRouteAsync(
+            request.OriginLat, request.OriginLng, request.DestinationLat, request.DestinationLng, cancellationToken);
+        if (route is not null)
+        {
+            load.SetRoute(route.DistanceKm, (int)Math.Round(route.EstimatedDuration.TotalMinutes));
+        }
 
         load.Post();
         await _loads.AddAsync(load, cancellationToken);
@@ -70,29 +85,27 @@ internal sealed class LoadService : ILoadService
         return Result<IReadOnlyList<LoadView>>.Success(loads.Select(Map).ToList());
     }
 
+    public async Task<Result<IReadOnlyList<LoadView>>> ListMineAsync(Guid authUserId, CancellationToken cancellationToken = default)
+    {
+        UserProfile? shipper = (await _users.ListAsync(u => u.AuthUserId == authUserId, cancellationToken)).FirstOrDefault();
+        if (shipper is null)
+        {
+            return Error.Validation("Complete your profile before viewing your loads.");
+        }
+
+        IReadOnlyList<Load> loads = await _loads.ListAsync(l => l.ShipperId == shipper.Id, cancellationToken);
+        return Result<IReadOnlyList<LoadView>>.Success(loads.Select(Map).ToList());
+    }
+
     public async Task<Result<LoadView>> GetAsync(Guid loadId, CancellationToken cancellationToken = default)
     {
         Load? load = await _loads.GetByIdAsync(loadId, cancellationToken);
         return load is null ? Error.NotFound("Load not found.") : Map(load);
     }
 
-    public async Task<Result> AcceptAsync(Guid loadId, CancellationToken cancellationToken = default)
-    {
-        Load? load = await _loads.GetByIdAsync(loadId, cancellationToken);
-        if (load is null)
-        {
-            return Result.Failure(Error.NotFound("Load not found."));
-        }
-
-        load.MarkMatched();
-        load.Book();
-        _loads.Update(load);
-        await _uow.SaveChangesAsync(cancellationToken);
-        return Result.Success();
-    }
-
     private static LoadView Map(Load l) => new(
         l.Id, l.ShipperId, l.Origin.Address, l.Destination.Address,
         l.PickupWindow.Start, l.PickupWindow.End, l.Requirement.CargoType,
-        l.Requirement.Weight.Kilograms, l.OfferedPrice?.Amount, l.Status);
+        l.Requirement.Weight.Kilograms, l.OfferedPrice?.Amount, l.Status,
+        l.DistanceKm, l.EstimatedDurationMinutes, l.PickupAreaType);
 }

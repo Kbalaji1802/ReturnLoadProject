@@ -20,7 +20,7 @@ class DriverProfileScreen extends ConsumerStatefulWidget {
 class _State extends ConsumerState<DriverProfileScreen> {
   final _name = TextEditingController();
   final _mobile = TextEditingController();
-  final _licence = TextEditingController(text: 'TN01 20200001234');
+  final _licence = TextEditingController();
   bool _busy = false;
   String? _msg;
 
@@ -33,6 +33,10 @@ class _State extends ConsumerState<DriverProfileScreen> {
   }
 
   Future<void> _submit() async {
+    if (_name.text.trim().isEmpty || _mobile.text.trim().isEmpty || _licence.text.trim().isEmpty) {
+      setState(() => _msg = 'Please fill in your name, mobile, and licence number.');
+      return;
+    }
     setState(() { _busy = true; _msg = null; });
     try {
       await ref.read(dioProvider).post<dynamic>('drivers/register', data: {
@@ -41,7 +45,14 @@ class _State extends ConsumerState<DriverProfileScreen> {
         'licenceNumber': _licence.text.trim(),
         'carrierId': null,
       });
-      setState(() => _msg = 'Driver profile created. Upload your licence for verification.');
+      // Success: reset the form and move to Documents (the natural next step — upload the licence).
+      if (!mounted) return;
+      _name.clear();
+      _mobile.clear();
+      _licence.clear();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Driver profile created — now upload your licence for verification.')));
+      context.go('/documents');
+      return;
     } on DioException catch (e) {
       final data = e.response?.data;
       setState(() => _msg = data is Map && data['errors'] is List && (data['errors'] as List).isNotEmpty
@@ -55,7 +66,7 @@ class _State extends ConsumerState<DriverProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Register as driver'), leading: BackButton(onPressed: () => context.go('/dashboard'))),
+      appBar: AppBar(title: const Text('Register as driver'), leading: BackButton(onPressed: () => context.go('/home'))),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 460),

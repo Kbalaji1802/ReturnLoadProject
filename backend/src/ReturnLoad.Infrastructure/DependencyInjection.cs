@@ -2,10 +2,15 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using ReturnLoad.Application.Abstractions.Geo;
 using ReturnLoad.Application.Abstractions.Identity;
 using ReturnLoad.Application.Abstractions.Persistence;
 using ReturnLoad.Application.Abstractions.Security;
 using ReturnLoad.Application.Abstractions.Storage;
+using ReturnLoad.Application.UseCases.Matching;
+using ReturnLoad.Infrastructure.Geo;
 using ReturnLoad.Infrastructure.Identity;
 using ReturnLoad.Infrastructure.Identity.Tokens;
 using ReturnLoad.Infrastructure.Persistence;
@@ -63,9 +68,55 @@ public static class DependencyInjection
         services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));
         services.AddSingleton<IFileStorageService, LocalDiskFileStorageService>();
 
+        AddGeo(services, configuration);
+
+        // Matching ranking parameters (M5) — tunable via the "Matching" config section.
+        services.Configure<MatchingOptions>(configuration.GetSection(MatchingOptions.SectionName));
+
+        // Live-tracking push (Part 6): a no-op by default so the app runs without a realtime
+        // transport (e.g. in tests); the API layer overrides this with the SignalR implementation.
+        services.AddSingleton<Application.Abstractions.Realtime.ILiveTrackingNotifier,
+            Application.Abstractions.Realtime.NoOpLiveTrackingNotifier>();
+
+        // Trip-lifecycle parameters (Part 5) — owner-confirmation window, via the "Trips" section.
+        services.Configure<ReturnLoad.Application.UseCases.Trips.TripOptions>(
+            configuration.GetSection(ReturnLoad.Application.UseCases.Trips.TripOptions.SectionName));
+
         AddIdentity(services, configuration);
 
         return services;
+    }
+
+    private static void AddGeo(IServiceCollection services, IConfiguration configuration)
+    {
+        // Geo providers (M4.2): OpenStreetMap Nominatim (autocomplete) + OSRM (routing) in dev,
+        // behind Application interfaces so a Google Places/Routes adapter swaps in without
+        // touching business code. Each provider gets one long-lived HttpClient (no per-request
+        // allocation) — deliberately avoiding a new IHttpClientFactory dependency for two calls.
+        services.Configure<GeoOptions>(configuration.GetSection(GeoOptions.SectionName));
+
+        services.AddSingleton<ILocationSearchService>(provider =>
+        {
+            GeoOptions options = provider.GetRequiredService<IOptions<GeoOptions>>().Value;
+            return new NominatimLocationSearchService(
+                CreateGeoHttpClient(options), options,
+                provider.GetRequiredService<ILogger<NominatimLocationSearchService>>());
+        });
+
+        services.AddSingleton<IRouteService>(provider =>
+        {
+            GeoOptions options = provider.GetRequiredService<IOptions<GeoOptions>>().Value;
+            return new OsrmRouteService(
+                CreateGeoHttpClient(options), options,
+                provider.GetRequiredService<ILogger<OsrmRouteService>>());
+        });
+    }
+
+    private static HttpClient CreateGeoHttpClient(GeoOptions options)
+    {
+        HttpClient client = new() { Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds) };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
+        return client;
     }
 
     private static void AddIdentity(IServiceCollection services, IConfiguration configuration)

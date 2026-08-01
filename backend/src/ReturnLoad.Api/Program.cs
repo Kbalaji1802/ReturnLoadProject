@@ -62,6 +62,11 @@ try
     builder.Services.AddJwtAuthentication(builder.Configuration);
     builder.Services.AddSignalR();
 
+    // Part 6: broadcast live tracking positions over SignalR (overrides the no-op default so the
+    // Application layer stays transport-agnostic).
+    builder.Services.AddSingleton<ReturnLoad.Application.Abstractions.Realtime.ILiveTrackingNotifier,
+        ReturnLoad.Api.Hubs.SignalRLiveTrackingNotifier>();
+
     // Unhandled exceptions become the standard error envelope (ADR-0008).
     // GlobalExceptionHandler writes the envelope and returns true, so it fully owns
     // the response. AddProblemDetails is registered ONLY because UseExceptionHandler()
@@ -130,6 +135,7 @@ try
 
     app.MapControllers();
     app.MapHub<NotificationsHub>("/hubs/notifications");
+    app.MapHub<TrackingHub>("/hubs/tracking");
 
     // Liveness: the process is up. Runs no dependency checks so orchestrators can
     // tell "alive" apart from "not yet ready".

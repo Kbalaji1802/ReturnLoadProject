@@ -51,6 +51,34 @@ public sealed class AuthEndpointsTests : IClassFixture<AuthApiFactory>
     }
 
     [Fact]
+    public async Task Register_defaults_to_the_driver_role()
+    {
+        HttpClient client = _factory.CreateClient();
+        ApiResponse<JsonElement> body = await ReadEnvelope(await Register(client, Unique("role-default"), StrongPassword));
+
+        JsonElement payload = DecodeJwtPayload(body.Data.GetProperty("accessToken").GetString()!);
+        Assert.Equal(Roles.Driver, payload.GetProperty("role").GetString());
+    }
+
+    [Fact]
+    public async Task Register_as_load_owner_grants_the_shipper_role()
+    {
+        HttpClient client = _factory.CreateClient();
+        HttpResponseMessage response = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            email = Unique("loadowner"),
+            password = StrongPassword,
+            phoneNumber = (string?)null,
+            deviceId = "test-device",
+            accountType = (int)AccountType.LoadOwner,
+        });
+
+        response.EnsureSuccessStatusCode();
+        JsonElement payload = DecodeJwtPayload((await ReadEnvelope(response)).Data.GetProperty("accessToken").GetString()!);
+        Assert.Equal(Roles.Shipper, payload.GetProperty("role").GetString());
+    }
+
+    [Fact]
     public async Task Register_with_a_weak_password_is_rejected_with_400()
     {
         HttpClient client = _factory.CreateClient();
@@ -155,6 +183,36 @@ public sealed class AuthEndpointsTests : IClassFixture<AuthApiFactory>
 
         response.EnsureSuccessStatusCode();
         Assert.True((await ReadEnvelope(response)).Success);
+    }
+
+    [Fact]
+    public async Task Drivers_me_returns_404_when_the_account_has_no_driver_profile()
+    {
+        HttpClient client = _factory.CreateClient();
+        string token = (await ReadEnvelope(await Register(client, Unique("nodriver"), StrongPassword)))
+            .Data.GetProperty("accessToken").GetString()!;
+
+        using HttpRequestMessage request = new(HttpMethod.Get, "/api/v1/drivers/me");
+        request.Headers.Authorization = new("Bearer", token);
+        HttpResponseMessage response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Generic_document_upload_is_forbidden_for_a_non_staff_user()
+    {
+        // A self-registered account is a Driver, not internal staff, so it cannot attach a
+        // document to an arbitrary owner id — it must use driver-upload (self-scoped). S1.
+        HttpClient client = _factory.CreateClient();
+        string token = (await ReadEnvelope(await Register(client, Unique("notstaff"), StrongPassword)))
+            .Data.GetProperty("accessToken").GetString()!;
+
+        using HttpRequestMessage request = new(HttpMethod.Post, "/api/v1/documents/upload");
+        request.Headers.Authorization = new("Bearer", token);
+        HttpResponseMessage response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     private static Task<HttpResponseMessage> Register(HttpClient client, string email, string password) =>
