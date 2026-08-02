@@ -58,3 +58,25 @@ public sealed class DocumentReviewConfiguration : AggregateConfiguration<Documen
         builder.HasIndex(r => r.DocumentId);
     }
 }
+
+/// <summary>
+/// Persists which expiry reminders have already gone out (RC-2 Part 13). The unique index on
+/// (DocumentId, ThresholdDays) is the idempotency guarantee: the sweep re-evaluates every document
+/// on every tick, and this is what stops a driver being notified again each pass for the whole
+/// window. It also makes a duplicate a database error rather than a silent double-send.
+/// </summary>
+public sealed class DocumentExpiryReminderConfiguration : AggregateConfiguration<DocumentExpiryReminder>
+{
+    protected override void ConfigureAggregate(EntityTypeBuilder<DocumentExpiryReminder> builder)
+    {
+        builder.ToTable("DocumentExpiryReminders");
+        builder.HasKey(r => r.Id);
+
+        builder.Property(r => r.DocumentId).IsRequired();
+        builder.Property(r => r.ThresholdDays).IsRequired();
+        builder.Property(r => r.SentAtUtc).IsRequired();
+
+        builder.HasOne<Document>().WithMany().HasForeignKey(r => r.DocumentId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasIndex(r => new { r.DocumentId, r.ThresholdDays }).IsUnique();
+    }
+}

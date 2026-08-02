@@ -42,6 +42,8 @@ public sealed class ApplicationDbContext
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
     public DbSet<Document> Documents => Set<Document>();
     public DbSet<DocumentReview> DocumentReviews => Set<DocumentReview>();
+
+    public DbSet<DocumentExpiryReminder> DocumentExpiryReminders => Set<DocumentExpiryReminder>();
     public DbSet<Load> Loads => Set<Load>();
     public DbSet<BookingRequest> BookingRequests => Set<BookingRequest>();
     public DbSet<Trip> Trips => Set<Trip>();

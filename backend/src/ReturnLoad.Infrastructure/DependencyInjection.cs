@@ -9,6 +9,7 @@ using ReturnLoad.Application.Abstractions.Identity;
 using ReturnLoad.Application.Abstractions.Persistence;
 using ReturnLoad.Application.Abstractions.Security;
 using ReturnLoad.Application.Abstractions.Storage;
+using ReturnLoad.Application.UseCases.Documents;
 using ReturnLoad.Application.UseCases.Matching;
 using ReturnLoad.Infrastructure.Geo;
 using ReturnLoad.Infrastructure.Identity;
@@ -75,6 +76,7 @@ public static class DependencyInjection
 
         // Matching ranking parameters (M5) — tunable via the "Matching" config section.
         services.Configure<MatchingOptions>(configuration.GetSection(MatchingOptions.SectionName));
+        services.Configure<DocumentExpiryOptions>(configuration.GetSection(DocumentExpiryOptions.SectionName));
 
         // Live-tracking push (Part 6): a no-op by default so the app runs without a realtime
         // transport (e.g. in tests); the API layer overrides this with the SignalR implementation.

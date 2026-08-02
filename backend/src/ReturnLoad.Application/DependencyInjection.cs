@@ -45,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<IReviewService, ReviewService>();
         services.AddScoped<IUserProfileService, UserProfileService>();
+        services.AddScoped<IDocumentExpiryService, DocumentExpiryService>();
 
         return services;
     }

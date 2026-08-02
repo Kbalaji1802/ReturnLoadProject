@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using ReturnLoad.Api.Configuration;
 using ReturnLoad.Api.Extensions;
 using ReturnLoad.Api.Http;
+using ReturnLoad.Api.HostedServices;
 using ReturnLoad.Api.Hubs;
 using ReturnLoad.Api.Middleware;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,6 +68,11 @@ try
     builder.Services.AddSwaggerConfigured();
     builder.Services.AddJwtAuthentication(builder.Configuration);
     builder.Services.AddSignalR();
+
+    // RC-2 Parts 13 & 17: warn document holders before a compliance document lapses. An expired
+    // licence/insurance/permit silently makes a driver unmatchable (MATCHING_ENGINE.md §2), so the
+    // sweep runs in-process on a timer rather than waiting for someone to notice.
+    builder.Services.AddHostedService<DocumentExpiryWorker>();
 
     // Part 6: broadcast live tracking positions over SignalR (overrides the no-op default so the
     // Application layer stays transport-agnostic).
