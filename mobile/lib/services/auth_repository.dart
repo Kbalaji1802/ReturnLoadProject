@@ -10,6 +10,10 @@ import 'dio_client.dart';
 /// both read this to authorise requests and gate navigation.
 final authTokenProvider = StateProvider<String?>((ref) => null);
 
+/// The refresh token for the current session. Access tokens live 15 minutes; without this
+/// the app would simply start failing every request a quarter of an hour after sign-in.
+final refreshTokenProvider = StateProvider<String?>((ref) => null);
+
 final _secureStorageProvider = Provider<FlutterSecureStorage>(
   (ref) => const FlutterSecureStorage(),
 );
@@ -56,6 +60,12 @@ class AuthRepository {
 
   final Ref _ref;
   static const _tokenKey = 'returnload.driver.token';
+  static const _refreshKey = 'returnload.driver.refresh';
+
+  /// De-duplicates concurrent refreshes. Several screens can 401 at once (the trips tab and
+  /// the notification poll, say); without this each would rotate the refresh token in turn
+  /// and all but one would be left holding a token the server has already invalidated.
+  Future<bool>? _inFlightRefresh;
 
   Future<void> login(String email, String password) =>
       _authenticate('auth/login', {'email': email, 'password': password, 'deviceId': 'driver-mobile'});
@@ -82,22 +92,70 @@ class AuthRepository {
     final dynamic raw = response.data;
     final Map<String, dynamic> envelope =
         raw is String ? jsonDecode(raw) as Map<String, dynamic> : raw as Map<String, dynamic>;
-    final String token = (envelope['data'] as Map<String, dynamic>)['accessToken'] as String;
+    await _storeTokens(envelope['data'] as Map<String, dynamic>);
+  }
 
-    // Set the in-memory token first so auth always succeeds once the token is issued;
-    // persisting it is best-effort (the web secure-storage backend can be flaky).
+  /// Persists a fresh token pair from an auth response body.
+  Future<void> _storeTokens(Map<String, dynamic> data) async {
+    final String token = data['accessToken'] as String;
+    final String? refreshToken = data['refreshToken'] as String?;
+
+    // Set the in-memory tokens first so auth always succeeds once they are issued;
+    // persisting is best-effort (the web secure-storage backend can be flaky).
     _ref.read(authTokenProvider.notifier).state = token;
+    _ref.read(refreshTokenProvider.notifier).state = refreshToken;
     try {
-      await _ref.read(_secureStorageProvider).write(key: _tokenKey, value: token);
+      final FlutterSecureStorage storage = _ref.read(_secureStorageProvider);
+      await storage.write(key: _tokenKey, value: token);
+      await storage.write(key: _refreshKey, value: refreshToken);
     } catch (_) {
-      // Non-fatal: token stays in memory for this session.
+      // Non-fatal: tokens stay in memory for this session.
+    }
+  }
+
+  /// Exchanges the stored refresh token for a new pair. Returns false when there is nothing
+  /// to refresh with or the server rejects it — the caller should then send the user to login.
+  Future<bool> refreshSession() => _inFlightRefresh ??=
+      _refreshSession().whenComplete(() => _inFlightRefresh = null);
+
+  Future<bool> _refreshSession() async {
+    final String? refreshToken = _ref.read(refreshTokenProvider);
+    if (refreshToken == null || refreshToken.isEmpty) {
+      return false;
+    }
+
+    try {
+      // A bare client on purpose: the shared Dio's error interceptor is what calls this, so
+      // reusing it would recurse if the refresh itself came back 401.
+      final Dio client = Dio(BaseOptions(
+        baseUrl: apiBaseUrl,
+        headers: const {'Accept': 'application/json'},
+      ));
+      final Response<dynamic> response = await client.post<dynamic>(
+        'auth/refresh',
+        data: {'refreshToken': refreshToken, 'deviceId': 'driver-mobile'},
+      );
+
+      final dynamic raw = response.data;
+      final Map<String, dynamic> envelope =
+          raw is String ? jsonDecode(raw) as Map<String, dynamic> : raw as Map<String, dynamic>;
+      final Map<String, dynamic>? data = envelope['data'] as Map<String, dynamic>?;
+      if (data == null) {
+        return false;
+      }
+
+      await _storeTokens(data);
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
   Future<void> restore() async {
     try {
-      final String? token = await _ref.read(_secureStorageProvider).read(key: _tokenKey);
-      _ref.read(authTokenProvider.notifier).state = token;
+      final FlutterSecureStorage storage = _ref.read(_secureStorageProvider);
+      _ref.read(authTokenProvider.notifier).state = await storage.read(key: _tokenKey);
+      _ref.read(refreshTokenProvider.notifier).state = await storage.read(key: _refreshKey);
     } catch (_) {
       // Ignore storage errors on restore.
     }
@@ -105,10 +163,13 @@ class AuthRepository {
 
   Future<void> logout() async {
     try {
-      await _ref.read(_secureStorageProvider).delete(key: _tokenKey);
+      final FlutterSecureStorage storage = _ref.read(_secureStorageProvider);
+      await storage.delete(key: _tokenKey);
+      await storage.delete(key: _refreshKey);
     } catch (_) {
       // ignore
     }
     _ref.read(authTokenProvider.notifier).state = null;
+    _ref.read(refreshTokenProvider.notifier).state = null;
   }
 }
