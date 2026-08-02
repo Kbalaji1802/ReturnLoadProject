@@ -21,8 +21,6 @@ public sealed class LocalDiskFileStorageService : IFileStorageService
             ? value.RootPath
             : Path.Combine(AppContext.BaseDirectory, value.RootPath);
         _publicBaseUrl = value.PublicBaseUrl.TrimEnd('/');
-
-        Directory.CreateDirectory(_rootPath);
     }
 
     public async Task<StoredFile> SaveAsync(FileUploadRequest request, CancellationToken cancellationToken = default)
@@ -30,6 +28,13 @@ public sealed class LocalDiskFileStorageService : IFileStorageService
         string extension = Path.GetExtension(request.FileName);
         string key = $"{Guid.NewGuid():N}{extension}";
         string path = ResolvePath(key);
+
+        // Created on the write path rather than in the constructor. This type is a singleton
+        // that every /documents endpoint depends on transitively, so a constructor that throws
+        // on an unwritable root turns *reads* into 500s too — listing documents needs no disk
+        // access at all. Failing here instead keeps the blast radius on the operation that
+        // actually needs the directory.
+        Directory.CreateDirectory(_rootPath);
 
         await using (FileStream destination = File.Create(path))
         {

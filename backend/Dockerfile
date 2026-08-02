@@ -28,6 +28,14 @@ WORKDIR /app
 
 COPY --from=build /app/publish .
 
+# Uploaded documents are written here (FileStorage:RootPath, relative to the app base
+# directory). Create it while still root and hand it to the app user: /app is root-owned,
+# so a non-root process cannot mkdir under it, and LocalDiskFileStorageService would fail
+# to construct — taking every /documents endpoint down with a 500.
+# NOTE: this is container-local and therefore ephemeral. Uploads do not survive a redeploy.
+# Mount a persistent volume here, or move to object storage, before this is real.
+RUN mkdir -p /app/storage && chown -R $APP_UID:$APP_UID /app/storage
+
 # Run as the image's built-in non-root user (least privilege — 01_PROJECT_RULES.md §5).
 USER $APP_UID
 
