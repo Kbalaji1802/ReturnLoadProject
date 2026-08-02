@@ -6,6 +6,10 @@
   "outputDirectory": "dist/admin/browser",
   "rewrites": [
     {
+      "source": "/api/v1/:path*",
+      "destination": "https://returnloadproject-api.onrender.com/api/v1/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
