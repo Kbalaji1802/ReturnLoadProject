@@ -12,7 +12,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 
-import { ApiService } from '../../core/api/api.service';
+import { ApiService, apiErrorMessage } from '../../core/api/api.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { VEHICLE_STATUS, label } from '../../core/api/enums';
 import { PageHeader } from '../../shared/ui/page-header';
@@ -161,7 +161,7 @@ export class Vehicles {
       this.busy.set(true);
       this.api.post(`vehicles/${v.id}/activate?documentsValid=true`, {}).subscribe({
         next: () => { this.snack.open('Vehicle approved.', 'OK', { duration: 2500 }); this.load(); },
-        error: () => { this.snack.open('Approval failed.', 'OK', { duration: 3000 }); this.busy.set(false); },
+        error: (e) => { this.snack.open(apiErrorMessage(e, 'Approval failed.'), 'OK', { duration: 5000 }); this.busy.set(false); },
       });
     });
   }
@@ -170,7 +170,12 @@ export class Vehicles {
     this.busy.set(true);
     this.api.get<VehicleView[]>('vehicles').subscribe({
       next: (v) => { this.all.set(v); this.busy.set(false); },
-      error: () => this.busy.set(false),
+      // Without this a failed request renders the "No vehicles" empty state, indistinguishable
+      // from a genuinely empty fleet — which is exactly how a real outage went unnoticed.
+      error: (e) => {
+        this.busy.set(false);
+        this.snack.open(apiErrorMessage(e, 'Could not load vehicles.'), 'OK', { duration: 5000 });
+      },
     });
   }
 }

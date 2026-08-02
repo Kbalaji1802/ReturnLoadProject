@@ -37,6 +37,28 @@ export class ApiService {
 }
 
 /**
+ * The API's own explanation of a failure, for display.
+ *
+ * Every error the API returns carries a human-readable message in the standard envelope — the
+ * rejection-reason minimum, an illegal trip transition, a validation failure. Replacing that with
+ * a generic "Action failed." throws away the only text that tells the operator what to do
+ * differently, and the platform rule is to fail loudly (01_PROJECT_RULES.md §1.5).
+ *
+ * Handles both shapes a failure arrives in: an `HttpErrorResponse` whose body is the envelope
+ * (non-2xx), and the `Error` thrown by {@link unwrap} for a `success: false` body served with 200.
+ */
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  const envelope = (error as { error?: ApiEnvelope<unknown> })?.error;
+  const fromBody = envelope?.errors?.[0]?.message ?? envelope?.message;
+  if (typeof fromBody === 'string' && fromBody.trim().length > 0) {
+    return fromBody;
+  }
+
+  const fromThrown = (error as Error)?.message;
+  return typeof fromThrown === 'string' && fromThrown.trim().length > 0 ? fromThrown : fallback;
+}
+
+/**
  * Unwraps the standard envelope. A `success: false` body (which can arrive with a 200) is a
  * failure, not data — surface it as an error so callers don't silently render an empty payload.
  */

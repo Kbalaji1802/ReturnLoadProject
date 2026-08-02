@@ -12,7 +12,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { ApiService } from '../../core/api/api.service';
+import { ApiService, apiErrorMessage } from '../../core/api/api.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { PendingDocumentView } from '../../core/api/api.models';
 import { DOCUMENT_TYPE, VERIFICATION_STATUS, label } from '../../core/api/enums';
@@ -217,7 +217,7 @@ export class Documents {
         a.click();
         URL.revokeObjectURL(url);
       },
-      error: () => this.snack.open('Could not download the file.', 'OK', { duration: 3000 }),
+      error: (e) => this.snack.open(apiErrorMessage(e, 'Could not download the file.'), 'OK', { duration: 5000 }),
     });
   }
 
@@ -233,7 +233,7 @@ export class Documents {
       this.busy.set(true);
       this.api.post(`documents/${d.id}/approve`, {}).subscribe({
         next: () => { this.snack.open('Document approved.', 'OK', { duration: 2500 }); this.load(); },
-        error: () => { this.snack.open('Approval failed.', 'OK', { duration: 3000 }); this.busy.set(false); },
+        error: (e) => { this.snack.open(apiErrorMessage(e, 'Approval failed.'), 'OK', { duration: 5000 }); this.busy.set(false); },
       });
     });
   }
@@ -245,7 +245,7 @@ export class Documents {
         this.busy.set(true);
         this.api.post(`documents/${d.id}/reject`, { reason }).subscribe({
           next: () => { this.snack.open('Document rejected — the driver was notified.', 'OK', { duration: 2500 }); this.load(); },
-          error: () => { this.snack.open('Rejection failed.', 'OK', { duration: 3000 }); this.busy.set(false); },
+          error: (e) => { this.snack.open(apiErrorMessage(e, 'Rejection failed.'), 'OK', { duration: 5000 }); this.busy.set(false); },
         });
       });
   }
@@ -254,7 +254,12 @@ export class Documents {
     this.busy.set(true);
     this.api.get<PendingDocumentView[]>('documents/pending').subscribe({
       next: (d) => { this.all.set(d); this.busy.set(false); },
-      error: () => this.busy.set(false),
+      // A failed load must not look like an empty queue — "Inbox zero" and "the request died"
+      // are the same screen otherwise.
+      error: (e) => {
+        this.busy.set(false);
+        this.snack.open(apiErrorMessage(e, 'Could not load the review queue.'), 'OK', { duration: 5000 });
+      },
     });
   }
 }
