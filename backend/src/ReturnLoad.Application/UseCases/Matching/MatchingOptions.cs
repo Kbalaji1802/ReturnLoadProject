@@ -24,6 +24,13 @@ public sealed class MatchingOptions
     public double HighwayRadiusKm { get; set; } = 25;
 
     /// <summary>
+    /// Widens the pickup radius for a load nobody has taken (RC-2 Part 3). Ordered steps; the last
+    /// one whose <see cref="RadiusEscalationStep.AfterMinutes"/> the load's age has passed wins.
+    /// An empty ladder disables escalation, leaving the flat area-type radius.
+    /// </summary>
+    public IList<RadiusEscalationStep> RadiusEscalation { get; set; } = [];
+
+    /// <summary>
     /// Resolves the configured pickup radius for a load's pickup area type (Part 2 hard filter).
     /// A driver farther than this from the pickup is excluded from the load, not merely down-ranked.
     /// </summary>
@@ -33,6 +40,31 @@ public sealed class MatchingOptions
         AreaType.Highway => HighwayRadiusKm,
         _ => SuburbanRadiusKm,
     };
+
+    /// <summary>
+    /// The pickup radius for a load of a given age (RC-2 Part 3). A load starts at its area-type
+    /// radius and widens as it goes unaccepted, so a rural pickup eventually reaches drivers who
+    /// were never in range rather than sitting unmatched forever.
+    /// <para>
+    /// Never narrower than the area-type radius: escalation only ever widens, so an early ladder
+    /// step configured below the base radius cannot shrink a load's reach and hide it from drivers
+    /// who could already see it.
+    /// </para>
+    /// </summary>
+    public double ResolvePickupRadiusKm(AreaType areaType, TimeSpan loadAge)
+    {
+        double radiusKm = ResolvePickupRadiusKm(areaType);
+
+        foreach (RadiusEscalationStep step in RadiusEscalation.OrderBy(s => s.AfterMinutes))
+        {
+            if (loadAge.TotalMinutes >= step.AfterMinutes && step.RadiusKm > radiusKm)
+            {
+                radiusKm = step.RadiusKm;
+            }
+        }
+
+        return radiusKm;
+    }
 
     /// <summary>Haul length that earns the full haul-length score (longer = more earning).</summary>
     public double MaxHaulKm { get; set; } = 600;
@@ -49,4 +81,14 @@ public sealed class MatchingOptions
     /// <summary>Bonus weight for a well-reviewed load owner (partner reputation, M8). Additive;
     /// the final score is clamped to 100.</summary>
     public int RatingWeight { get; set; } = 10;
+}
+
+/// <summary>One rung of the unaccepted-load radius ladder (RC-2 Part 3).</summary>
+public sealed class RadiusEscalationStep
+{
+    /// <summary>Minutes since the load was posted, after which this rung applies.</summary>
+    public double AfterMinutes { get; set; }
+
+    /// <summary>The pickup radius (km) to use from that point on.</summary>
+    public double RadiusKm { get; set; }
 }

@@ -142,7 +142,10 @@ internal sealed class MatchingService : IMatchingService
 
             // Filter 5 — Pickup Radius (Part 2). The load's area type sets the radius (Urban 5 /
             // Suburban 10 / Highway 25 km, all config). A driver beyond it is EXCLUDED, not ranked.
-            double radiusKm = _options.ResolvePickupRadiusKm(load.PickupAreaType);
+            // The radius widens the longer the load goes unaccepted (RC-2 Part 3), so a pickup no
+            // nearby driver wants reaches further out instead of sitting unmatched indefinitely.
+            double radiusKm = _options.ResolvePickupRadiusKm(
+                load.PickupAreaType, DateTimeOffset.UtcNow - load.CreatedAtUtc);
             double pickupDistanceKm = MatchingScorer.HaversineKm(
                 dLat, dLng, load.Origin.Coordinate.Latitude, load.Origin.Coordinate.Longitude);
             if (pickupDistanceKm > radiusKm)
