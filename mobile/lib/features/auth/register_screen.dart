@@ -19,6 +19,7 @@ class RegisterScreen extends ConsumerStatefulWidget {
 }
 
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
+  final _fullName = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _phone = TextEditingController();
@@ -28,6 +29,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   @override
   void dispose() {
+    _fullName.dispose();
     _email.dispose();
     _password.dispose();
     _phone.dispose();
@@ -35,13 +37,22 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   Future<void> _submit() async {
+    // Name and mobile are what the API needs to build the platform profile during
+    // registration. Without them the account is created but cannot post a load or be
+    // matched, so they are required here rather than deferred to a later screen.
+    if (_fullName.text.trim().isEmpty || _phone.text.trim().isEmpty) {
+      setState(() => _error = 'Full name and mobile are required.');
+      return;
+    }
+
     setState(() { _busy = true; _error = null; });
     try {
       await ref.read(authRepositoryProvider).register(
             _email.text.trim(),
             _password.text,
-            _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+            _phone.text.trim(),
             _accountType,
+            fullName: _fullName.text.trim(),
           );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account created — welcome to ReturnLoad!')));
@@ -86,11 +97,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   onSelectionChanged: _busy ? null : (s) => setState(() => _accountType = s.first),
                 ),
                 const SizedBox(height: 16),
+                TextField(controller: _fullName, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Full name', border: OutlineInputBorder())),
+                const SizedBox(height: 12),
                 TextField(controller: _email, decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder())),
                 const SizedBox(height: 12),
                 TextField(controller: _password, obscureText: true, decoration: const InputDecoration(labelText: 'Password (min 12 chars, mixed case, digit, symbol)', border: OutlineInputBorder())),
                 const SizedBox(height: 12),
-                TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Mobile (optional)', border: OutlineInputBorder())),
+                TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Mobile', border: OutlineInputBorder())),
                 const SizedBox(height: 16),
                 if (_error != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(_error!, style: const TextStyle(color: Colors.red))),
                 FilledButton(

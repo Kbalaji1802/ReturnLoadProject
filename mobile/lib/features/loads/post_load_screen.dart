@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../services/dio_client.dart';
+import '../../shared/widgets/complete_profile_sheet.dart';
 
 /// Lets a shipper post a load (POST /loads). Requires the Shipper role — sign in as
 /// shipper@returnload.test for the demo. Pickup window defaults to a sensible range.
@@ -95,6 +96,16 @@ class _State extends ConsumerState<PostLoadScreen> {
       context.go('/my-loads');
       return;
     } on DioException catch (e) {
+      // The API gates posting on having a platform profile. Accounts created before
+      // registration collected a name have none, so offer the form and retry rather than
+      // telling the user to complete something with no way to do it.
+      if (e.response?.statusCode == 400 && _isMissingProfile(e) && mounted) {
+        if (await showCompleteProfileSheet(context)) {
+          if (mounted) await _submit();
+          return;
+        }
+      }
+
       setState(() {
         if (e.response?.statusCode == 403) {
           _msg = 'Only a Shipper can post loads. Sign in as shipper@returnload.test.';
@@ -108,6 +119,18 @@ class _State extends ConsumerState<PostLoadScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Matched on the server's message rather than a code: the API returns a plain
+  /// VALIDATION_ERROR for this, shared with every other 400 the endpoint can produce.
+  static bool _isMissingProfile(DioException e) {
+    final data = e.response?.data;
+    if (data is! Map) return false;
+    final errors = data['errors'];
+    final String message = errors is List && errors.isNotEmpty
+        ? (errors.first['message']?.toString() ?? '')
+        : (data['message']?.toString() ?? '');
+    return message.toLowerCase().contains('complete your profile');
   }
 
   @override

@@ -6,9 +6,16 @@ namespace ReturnLoad.Application.Identity;
 /// determines the role granted at sign-up (M4.2, ADR-0017) — the public can never self-assign
 /// internal/admin roles. Defaults to <see cref="Identity.AccountType.Driver"/> when omitted.
 /// </summary>
+/// <param name="FullName">
+/// Supplied together with <paramref name="PhoneNumber"/>, this creates the account's
+/// <c>UserProfile</c> during registration, so a new load owner can post a load immediately
+/// rather than hitting a "Complete your profile" gate with no form behind it. Optional to keep
+/// the contract backwards-compatible; clients that omit it can create the profile later via
+/// <c>POST /profile</c>.
+/// </param>
 public sealed record RegisterRequest(
     string Email, string Password, string? PhoneNumber, string? DeviceId,
-    AccountType AccountType = AccountType.Driver);
+    AccountType AccountType = AccountType.Driver, string? FullName = null);
 
 /// <summary>Login input.</summary>
 public sealed record LoginRequest(string Email, string Password, string? DeviceId);

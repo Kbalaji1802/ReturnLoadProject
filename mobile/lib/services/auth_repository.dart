@@ -72,7 +72,17 @@ class AuthRepository {
 
   /// Self-service registration; the API returns tokens, so the user is signed in immediately.
   /// [accountType] chooses the marketplace side and the role granted at sign-up (M4.2).
-  Future<void> register(String email, String password, String? phone, AccountType accountType) => _authenticate(
+  /// [fullName] with a mobile number lets the API create the platform profile during
+  /// registration, so a new load owner can post immediately instead of being blocked by the
+  /// "Complete your profile" gate.
+  Future<void> register(
+    String email,
+    String password,
+    String? phone,
+    AccountType accountType, {
+    String? fullName,
+  }) =>
+      _authenticate(
         'auth/register',
         {
           'email': email,
@@ -81,8 +91,29 @@ class AuthRepository {
           'deviceId': 'driver-mobile',
           // The API's AccountType enum is serialised as an integer: Driver=0, LoadOwner=1.
           'accountType': accountType == AccountType.loadOwner ? 1 : 0,
+          'fullName': fullName,
         },
       );
+
+  /// Creates the signed-in account's platform profile. The backfill path for accounts that
+  /// registered before a name was collected — they would otherwise have to sign up again.
+  Future<void> createProfile(String fullName, String mobile, {String? email}) async {
+    await _ref.read(dioProvider).post<dynamic>(
+      'profile',
+      data: {'fullName': fullName, 'mobile': mobile, 'email': email},
+    );
+  }
+
+  /// Whether the signed-in account already has a platform profile.
+  Future<bool> hasProfile() async {
+    try {
+      await _ref.read(dioProvider).get<dynamic>('profile/me');
+      return true;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return false;
+      rethrow;
+    }
+  }
 
   Future<void> _authenticate(String path, Map<String, dynamic> body) async {
     final Dio dio = _ref.read(dioProvider);

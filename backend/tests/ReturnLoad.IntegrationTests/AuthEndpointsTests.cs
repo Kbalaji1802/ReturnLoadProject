@@ -215,6 +215,88 @@ public sealed class AuthEndpointsTests : IClassFixture<AuthApiFactory>
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Registering_with_a_name_and_mobile_creates_the_profile()
+    {
+        // A load owner who signs up with enough detail must be able to act immediately. Without
+        // this, only the seeded demo shipper had a UserProfile and every real signup was told to
+        // "complete your profile" with no endpoint that could.
+        HttpClient client = _factory.CreateClient();
+        HttpResponseMessage registration = await client.PostAsJsonAsync("/api/v1/auth/register", new
+        {
+            email = Unique("owner-with-name"),
+            password = StrongPassword,
+            phoneNumber = "9800000001",
+            deviceId = "test-device",
+            accountType = (int)AccountType.LoadOwner,
+            fullName = "Profiled Owner",
+        });
+        registration.EnsureSuccessStatusCode();
+        string token = (await ReadEnvelope(registration)).Data.GetProperty("accessToken").GetString()!;
+
+        using HttpRequestMessage request = new(HttpMethod.Get, "/api/v1/profile/me");
+        request.Headers.Authorization = new("Bearer", token);
+        HttpResponseMessage response = await client.SendAsync(request);
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("Profiled Owner", (await ReadEnvelope(response)).Data.GetProperty("fullName").GetString());
+    }
+
+    [Fact]
+    public async Task An_account_without_a_profile_can_create_one()
+    {
+        // The backfill path for accounts that already exist — they registered before the name
+        // was collected, so they need a way to complete the profile without re-registering.
+        HttpClient client = _factory.CreateClient();
+        string token = (await ReadEnvelope(await Register(client, Unique("owner-no-name"), StrongPassword)))
+            .Data.GetProperty("accessToken").GetString()!;
+
+        using HttpRequestMessage before = new(HttpMethod.Get, "/api/v1/profile/me");
+        before.Headers.Authorization = new("Bearer", token);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(before)).StatusCode);
+
+        using HttpRequestMessage create = new(HttpMethod.Post, "/api/v1/profile")
+        {
+            Content = JsonContent.Create(new { fullName = "Backfilled Owner", mobile = "9800000002", email = (string?)null }),
+        };
+        create.Headers.Authorization = new("Bearer", token);
+        (await client.SendAsync(create)).EnsureSuccessStatusCode();
+
+        using HttpRequestMessage after = new(HttpMethod.Get, "/api/v1/profile/me");
+        after.Headers.Authorization = new("Bearer", token);
+        HttpResponseMessage response = await client.SendAsync(after);
+
+        response.EnsureSuccessStatusCode();
+        Assert.Equal("Backfilled Owner", (await ReadEnvelope(response)).Data.GetProperty("fullName").GetString());
+    }
+
+    [Fact]
+    public async Task Creating_a_second_profile_conflicts()
+    {
+        HttpClient client = _factory.CreateClient();
+        string token = (await ReadEnvelope(await Register(client, Unique("owner-dupe"), StrongPassword)))
+            .Data.GetProperty("accessToken").GetString()!;
+
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            using HttpRequestMessage create = new(HttpMethod.Post, "/api/v1/profile")
+            {
+                Content = JsonContent.Create(new { fullName = "Only Once", mobile = "9800000003", email = (string?)null }),
+            };
+            create.Headers.Authorization = new("Bearer", token);
+            HttpResponseMessage response = await client.SendAsync(create);
+
+            if (attempt == 0)
+            {
+                response.EnsureSuccessStatusCode();
+            }
+            else
+            {
+                Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            }
+        }
+    }
+
     private static Task<HttpResponseMessage> Register(HttpClient client, string email, string password) =>
         client.PostAsJsonAsync("/api/v1/auth/register", new { email, password, phoneNumber = (string?)null, deviceId = "test-device" });
 

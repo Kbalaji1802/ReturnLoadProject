@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using ReturnLoad.Application.Abstractions.Identity;
 using ReturnLoad.Application.Identity;
+using ReturnLoad.Application.UseCases.Profiles;
 using ReturnLoad.Infrastructure.Identity.Tokens;
 using ReturnLoad.Shared.Results;
 
@@ -19,17 +20,20 @@ internal sealed class AuthService : IAuthService
     private readonly UserManager<ApplicationUser> _users;
     private readonly ITokenService _tokens;
     private readonly IRefreshTokenService _refreshTokens;
+    private readonly IUserProfileService _profiles;
     private readonly ILogger<AuthService> _logger;
 
     public AuthService(
         UserManager<ApplicationUser> users,
         ITokenService tokens,
         IRefreshTokenService refreshTokens,
+        IUserProfileService profiles,
         ILogger<AuthService> logger)
     {
         _users = users;
         _tokens = tokens;
         _refreshTokens = refreshTokens;
+        _profiles = profiles;
         _logger = logger;
     }
 
@@ -65,6 +69,26 @@ internal sealed class AuthService : IAuthService
             _logger.LogError("Role assignment failed for {Email}: {Errors}", email,
                 string.Join("; ", roleResult.Errors.Select(e => e.Description)));
             return Error.Validation("Could not complete registration. Please try again.");
+        }
+
+        // Create the platform profile up front when the client supplied enough to build one.
+        // Drivers get theirs from drivers/register, but a load owner had no such step and would
+        // otherwise be told to "complete your profile" with nothing to complete it with.
+        // Best-effort: the account and role are already valid, and POST /profile remains the
+        // fallback, so a bad mobile number must not strand a half-registered account.
+        if (!string.IsNullOrWhiteSpace(request.FullName) && !string.IsNullOrWhiteSpace(request.PhoneNumber))
+        {
+            Result<Guid> profile = await _profiles.CreateAsync(
+                user.Id,
+                new CreateUserProfileRequest(request.FullName, request.PhoneNumber, email),
+                cancellationToken);
+
+            if (profile.IsFailure)
+            {
+                _logger.LogWarning(
+                    "Registered {Email} but could not create their profile: {Error}. They can create it via POST /profile.",
+                    email, profile.Error.Message);
+            }
         }
 
         LogSecurity("AccountRegistered", "Account registered for {Email} as {Role}", email, role);
