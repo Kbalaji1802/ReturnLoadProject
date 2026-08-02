@@ -239,6 +239,12 @@ public sealed class UseCaseFlowTests : IDisposable
         await trips.AdvanceAsync(shipperAuthId, accepted.Value, TripStatus.DeliveryConfirmed, privileged: false); // owner gate
         await trips.AdvanceAsync(driverAuthId, accepted.Value, TripStatus.Completed, privileged: false);
 
+        // The load must follow the trip. It previously stopped at Booked on acceptance and never
+        // moved again, so a finished delivery still counted as "running" on the owner's dashboard
+        // and "Delivered" was permanently zero.
+        Domain.Loads.Load deliveredLoad = await db.Loads.AsNoTracking().FirstAsync(l => l.Id == loadId);
+        Assert.Equal(Domain.Loads.LoadStatus.Delivered, deliveredLoad.Status);
+
         IReviewService reviews = _provider.GetRequiredService<IReviewService>();
         Assert.True((await reviews.SubmitAsync(driverAuthId, accepted.Value, new SubmitReviewRequest(5, "Great load owner"))).IsSuccess);
         Assert.True((await reviews.SubmitAsync(shipperAuthId, accepted.Value, new SubmitReviewRequest(4, "Reliable driver"))).IsSuccess);

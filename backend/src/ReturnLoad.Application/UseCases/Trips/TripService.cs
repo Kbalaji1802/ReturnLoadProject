@@ -223,6 +223,14 @@ internal sealed class TripService : ITripService
             }
         }
 
+        // Keep the load's lifecycle in step with the trip's. Without this a load stops at Booked
+        // the moment it is accepted and never advances, so the owner's dashboard reports a
+        // finished delivery as still running and "Delivered" is permanently zero.
+        if (load is not null)
+        {
+            AdvanceLoad(load, target);
+        }
+
         // Notify the load owner at the milestones they care about — including the two confirmation
         // gates they must action (Part 5), so the truck is not left waiting silently.
         if (load is not null)
@@ -243,6 +251,42 @@ internal sealed class TripService : ITripService
 
         await _uow.SaveChangesAsync(cancellationToken);
         return Result.Success();
+    }
+
+    /// <summary>
+    /// Mirrors a trip milestone onto the load it fulfils: goods on board means the load is in
+    /// transit, a completed trip means it is delivered.
+    /// <para>
+    /// Each step is guarded by the load's current status rather than assumed from the trip's,
+    /// because the two can legitimately diverge — staff can advance a trip past a gate, and
+    /// <c>Deliver()</c> requires InTransit, so a trip jumping straight to Completed would
+    /// otherwise throw out of a transition that is only a projection. A load already Delivered
+    /// or Cancelled is left alone.
+    /// </para>
+    /// </summary>
+    private void AdvanceLoad(Load load, TripStatus target)
+    {
+        if (load.Status is LoadStatus.Delivered or LoadStatus.Cancelled)
+        {
+            return;
+        }
+
+        // The goods are aboard from Loaded onwards; Completed also implies transit happened.
+        bool inTransit = target is TripStatus.Loaded or TripStatus.InTransit
+            or TripStatus.ArrivedDestination or TripStatus.Unloaded
+            or TripStatus.DeliveryConfirmed or TripStatus.Completed;
+
+        if (inTransit && load.Status is LoadStatus.Booked)
+        {
+            load.StartTransit();
+        }
+
+        if (target is TripStatus.Completed && load.Status is LoadStatus.InTransit)
+        {
+            load.Deliver();
+        }
+
+        _loads.Update(load);
     }
 
     /// <summary>
