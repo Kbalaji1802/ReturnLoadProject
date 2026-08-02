@@ -85,6 +85,12 @@ public interface IDocumentService
 
 internal sealed class DocumentService : IDocumentService
 {
+    /// <summary>
+    /// Shortest acceptable rejection reason (RC-2 Part 1). Mirrored by the admin dialog; enforced
+    /// here because that is the boundary every client crosses.
+    /// </summary>
+    internal const int MinimumRejectionReasonLength = 20;
+
     private readonly IRepository<Document> _documents;
     private readonly IRepository<DocumentReview> _reviews;
     private readonly IRepository<DriverProfile> _drivers;
@@ -195,12 +201,23 @@ internal sealed class DocumentService : IDocumentService
 
     public async Task<Result> RejectAsync(Guid documentId, string reason, Guid decidedByUserId = default, CancellationToken cancellationToken = default)
     {
+        // A driver has to act on this text to fix their document, and "no" tells them nothing.
+        // The admin dialog enforces the same floor, but a client-side rule is not a rule — the
+        // API is reachable directly and the reason is permanent in the review history.
+        string trimmedReason = (reason ?? string.Empty).Trim();
+        if (trimmedReason.Length < MinimumRejectionReasonLength)
+        {
+            return Result.Failure(Error.Validation(
+                $"A rejection reason must be at least {MinimumRejectionReasonLength} characters so the driver knows what to fix."));
+        }
+
         Document? document = await _documents.GetByIdAsync(documentId, cancellationToken);
         if (document is null)
         {
             return Result.Failure(Error.NotFound("Document not found."));
         }
 
+        reason = trimmedReason;
         document.Reject(reason);
         _documents.Update(document);
         await _reviews.AddAsync(

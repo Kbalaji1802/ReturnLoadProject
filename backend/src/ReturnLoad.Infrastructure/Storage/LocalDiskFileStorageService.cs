@@ -45,6 +45,28 @@ public sealed class LocalDiskFileStorageService : IFileStorageService
         return new StoredFile(key, request.FileName, request.ContentType, size);
     }
 
+    /// <summary>
+    /// The MIME type a stored file should be served as, derived from the extension its key kept
+    /// at upload (<see cref="SaveAsync"/> preserves it).
+    /// <para>
+    /// This matters more than it looks: everything used to be served as
+    /// <c>application/octet-stream</c>, and a browser will not render that inline. The admin
+    /// preview dialog inspects <c>blob.type</c> to choose between an image and a PDF frame, so a
+    /// generic type sent every document — including PNGs — into the frame branch, where it
+    /// rendered as nothing at all. Uploads are already MIME-allowlisted (FileUploadOptions), so
+    /// the extension is a trustworthy signal by the time a file is stored.
+    /// </para>
+    /// </summary>
+    private static string ResolveContentType(string key) => Path.GetExtension(key).ToLowerInvariant() switch
+    {
+        ".pdf" => "application/pdf",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".png" => "image/png",
+        // Unknown extension: octet-stream is the honest answer. The client shows a
+        // "cannot preview, download instead" state rather than an empty frame.
+        _ => "application/octet-stream",
+    };
+
     public Task<FileContent?> GetAsync(string key, CancellationToken cancellationToken = default)
     {
         string path = ResolvePath(key);
@@ -54,7 +76,7 @@ public sealed class LocalDiskFileStorageService : IFileStorageService
         }
 
         Stream content = File.OpenRead(path);
-        FileContent result = new(content, "application/octet-stream", key);
+        FileContent result = new(content, ResolveContentType(key), key);
         return Task.FromResult<FileContent?>(result);
     }
 

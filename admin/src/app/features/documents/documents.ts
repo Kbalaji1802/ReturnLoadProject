@@ -21,7 +21,7 @@ import { StatusChip } from '../../shared/ui/status-chip';
 import { EmptyState } from '../../shared/ui/empty-state';
 import { ConfirmDialog } from '../../shared/ui/confirm-dialog';
 import { RejectDialog } from '../../shared/ui/reject-dialog';
-import { DocPreviewDialog } from '../../shared/ui/doc-preview-dialog';
+import { DocPreviewDialog, DocPreviewItem } from '../../shared/ui/doc-preview-dialog';
 
 type SortKey = 'driverName' | 'company' | 'vehicle' | 'type' | 'uploadedAtUtc' | 'expiresOn' | 'status';
 
@@ -188,10 +188,23 @@ export class Documents {
   }
 
   protected view(d: PendingDocumentView): void {
+    // Hand the dialog the whole filtered queue so a reviewer can step through the backlog with
+    // the arrows instead of closing and reopening for every row. Sorted/filtered order is what
+    // they see in the table, so it is the order they expect to walk.
+    const queue = this.filtered().map((row) => this.toPreviewItem(row));
+    const index = Math.max(0, this.filtered().findIndex((row) => row.id === d.id));
+
     this.dialog.open(DocPreviewDialog, {
-      data: { documentId: d.id, title: this.docType(d.type) + (d.driverName ? ` · ${d.driverName}` : '') },
+      data: { ...this.toPreviewItem(d), queue, index },
       width: '900px', maxWidth: '95vw',
     });
+  }
+
+  private toPreviewItem(d: PendingDocumentView): DocPreviewItem {
+    return {
+      documentId: d.id,
+      title: this.docType(d.type) + (d.driverName ? ` · ${d.driverName}` : ''),
+    };
   }
 
   protected download(d: PendingDocumentView): void {

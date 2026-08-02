@@ -365,23 +365,31 @@ public sealed class UseCaseFlowTests : IDisposable
         Assert.Equal(DocumentType.DrivingLicence, row.Type);
         Assert.Equal("DL-9", row.DocumentNumber);
 
-        // Part 8: reject with a reason → driver is notified and can read the reason.
         Guid adminId = Guid.NewGuid();
-        Assert.True((await documents.RejectAsync(docId, "Blurry scan", adminId)).IsSuccess);
+
+        // RC-2 Part 1: a reason too short to act on is refused before anything is written. The
+        // admin dialog enforces the same floor, but the API is reachable directly.
+        Result tooShort = await documents.RejectAsync(docId, "blurry", adminId);
+        Assert.True(tooShort.IsFailure);
+        Assert.Contains("at least 20 characters", tooShort.Error.Message);
+        Assert.Empty((await documents.ListReviewHistoryAsync(docId)).Value);
+
+        // Part 8: reject with a reason → driver is notified and can read the reason.
+        Assert.True((await documents.RejectAsync(docId, "Blurry scan - the licence number is unreadable", adminId)).IsSuccess);
 
         INotificationService notifications = _provider.GetRequiredService<INotificationService>();
         IReadOnlyList<NotificationView> inbox = (await notifications.ListMineAsync(driverAuthId)).Value;
         Assert.Contains(inbox, n => n.Subject == "Document rejected");
 
         DocumentView rejected = (await documents.ListForOwnerAsync(DocumentOwnerType.Driver, driver.DriverProfileId)).Value.Single(d => d.Id == docId);
-        Assert.Equal("Blurry scan", rejected.RejectionReason);
+        Assert.Equal("Blurry scan - the licence number is unreadable", rejected.RejectionReason);
         Assert.Equal(Domain.Documents.VerificationStatus.Rejected, rejected.VerificationStatus);
 
         // The decision is kept in the append-only history with its reason and reviewer.
         IReadOnlyList<DocumentReviewView> history = (await documents.ListReviewHistoryAsync(docId)).Value;
         DocumentReviewView entry = Assert.Single(history);
         Assert.Equal(Domain.Documents.DocumentReviewDecision.Rejected, entry.Decision);
-        Assert.Equal("Blurry scan", entry.Reason);
+        Assert.Equal("Blurry scan - the licence number is unreadable", entry.Reason);
         Assert.Equal(adminId, entry.DecidedByUserId);
 
         // Part 8: the driver re-uploads a replacement → the prior document is archived (history kept).
