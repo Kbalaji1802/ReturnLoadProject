@@ -22,7 +22,7 @@ public sealed class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Ap
 
         DbContextOptions<ApplicationDbContext> options =
             new DbContextOptionsBuilder<ApplicationDbContext>()
-                .UseNpgsql(connection)
+                .UseNpgsql(PostgresConnectionString.Normalize(connection))
                 .Options;
 
         return new ApplicationDbContext(options, new NoOpFieldEncryptor());

@@ -1,0 +1,68 @@
+# Render blueprint for the ReturnLoad API.
+#
+# The API is ASP.NET Core 9 and builds from backend/Dockerfile. The two settings that
+# most often break a hand-created Render service are encoded here explicitly:
+#   * rootDir — the Dockerfile COPYs ReturnLoad.sln from the context root, so the build
+#     context must be backend/, not the repository root.
+#   * healthCheckPath — the app serves /health/live; Render's default of "/" returns 404
+#     and the deploy is marked unhealthy.
+#
+# Secrets (sync: false) are set in the Render dashboard, never committed.
+# See docs/ for the full deployment notes.
+
+services:
+  - type: web
+    name: returnload-api
+    runtime: docker
+    plan: free
+    region: singapore
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health/live
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+
+      # Render injects PORT and routes public traffic to it; Program.cs binds
+      # http://0.0.0.0:$PORT. ASPNETCORE_HTTP_PORTS from the Dockerfile is only the
+      # local-Docker default and is deliberately not set here.
+
+      # Npgsql accepts either the provider's postgresql:// URI or a keyword/value
+      # string — PostgresConnectionString.Normalize handles the conversion.
+      - key: ConnectionStrings__ReturnLoadDatabase
+        fromDatabase:
+          name: returnload-db
+          property: connectionString
+
+      # Startup fails fast outside Development if any of these are missing
+      # (JwtOptionsValidator).
+      - key: Jwt__Issuer
+        value: https://returnload-api.onrender.com
+      - key: Jwt__Audience
+        value: returnload-clients
+      - key: Jwt__SigningKey
+        generateValue: true
+
+      # Base64-encoded 32-byte AES key for encrypted columns (ADR-0015). Generate once
+      # and keep it stable — rotating it makes existing encrypted rows unreadable.
+      - key: Encryption__Key
+        sync: false
+
+      # Set to true for the first boot only, to create the admin login, then set it back
+      # to false. Migrations are applied on every start regardless.
+      - key: SeedDemoData
+        value: "false"
+
+      # Browser origin of the admin console. Required for the Vercel frontend to call
+      # this API directly; unnecessary if requests are proxied same-origin via Vercel.
+      - key: Cors__AllowedOrigins__0
+        sync: false
+      - key: Cors__AllowCredentials
+        value: "true"
+
+databases:
+  - name: returnload-db
+    databaseName: returnload
+    plan: free
+    region: singapore

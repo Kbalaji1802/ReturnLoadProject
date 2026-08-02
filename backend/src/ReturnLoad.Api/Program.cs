@@ -171,6 +171,11 @@ catch (Exception ex) when (ex is not HostAbortedException)
     // HostAbortedException is the control-flow signal WebApplicationFactory uses to
     // capture the host during integration tests — it must NOT be treated as a crash.
     Log.Fatal(ex, "ReturnLoad API terminated unexpectedly during startup.");
+
+    // Swallowing the exception here would otherwise exit 0, so a PaaS host (Render,
+    // Railway) reports a "successful" deploy that then fails its port scan — hiding the
+    // real cause. A non-zero code makes a startup misconfiguration visibly a crash.
+    Environment.ExitCode = 1;
 }
 finally
 {

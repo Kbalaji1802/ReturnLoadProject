@@ -51,7 +51,10 @@ public static class DependencyInjection
         services.Configure<EncryptionOptions>(configuration.GetSection(EncryptionOptions.SectionName));
         services.AddSingleton<IFieldEncryptor, AesFieldEncryptor>();
 
-        services.AddDbContext<ApplicationDbContext>(options => options.UseNpgsql(connectionString));
+        // Managed providers hand out a postgresql:// URI, which Npgsql cannot parse — accept
+        // either form so the deploy config can be the provider's value verbatim.
+        services.AddDbContext<ApplicationDbContext>(
+            options => options.UseNpgsql(PostgresConnectionString.Normalize(connectionString)));
 
         // Persistence contracts (ADR-0014/0015): generic repository + unit of work.
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
