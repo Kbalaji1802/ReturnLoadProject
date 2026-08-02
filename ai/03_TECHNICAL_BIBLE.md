@@ -216,6 +216,32 @@ Every change runs through:
 4. **Security scan** (dependencies + secrets)
 5. **Preview / staging deploy** before production
 
+### 9.1 Implemented pipeline (ADR-0021, closes T-011)
+
+`.github/workflows/ci.yml` runs on every push and PR. Three **independent** jobs, so a red one
+names the broken tier rather than reporting only that the build failed:
+
+| Job | Steps |
+|-----|-------|
+| **backend** | `dotnet restore` → `dotnet build -c Release` → `dotnet test` |
+| **admin** | `npm ci` → `ng build --configuration production` → `ng test` |
+| **mobile** | `flutter pub get` → `flutter analyze` → `flutter test` → **`flutter build apk --release`** |
+
+Two deliberate choices:
+
+- **The mobile release compile is a gate, not a nicety.** A missing import once reached the repo
+  because debug builds tolerated it and `--release` did not. Analyze and test both passed; only
+  the release compile failed.
+- **Warnings are not promoted to errors.** The analyzers flag style beside correctness, and
+  failing CI on formatting teaches people to route around it.
+
+Angular's production configuration is used because it carries the bundle budgets — an overrun
+fails there and nowhere else.
+
+**Still missing from the list above:** step 4 (dependency/secret scanning) and step 5
+(preview/staging deploy). Integration tests also build their schema with `EnsureCreated()`, so
+**no migration is exercised by CI** — migration SQL first runs on deploy.
+
 ## 10. Observability
 
 - **Structured logging** (JSON) with correlation IDs across services.

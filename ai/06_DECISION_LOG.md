@@ -23,6 +23,54 @@
 
 ---
 
+## ADR-0021 — RC-2: time-escalating pickup radius, document-expiry sweep, CI on every tier
+- **Date:** 2026-08-02
+- **Status:** Accepted
+- **Context:** RC-2 aims to turn the MVP into a pilot-ready platform. A gap analysis against the
+  20-part brief found most of Parts 1/2/4/6/7 already delivered server-side by ADR-0020 — the
+  outstanding work there is client-side, as that ADR predicted. Three gaps were genuinely
+  unimplemented and each blocks pilot use: (a) the pickup radius was a flat per-area-type hard
+  filter, so a load nobody nearby wanted stayed invisible to everyone else forever; (b) nothing
+  watched document expiry, yet an expired licence/insurance/permit silently makes a holder
+  unmatchable (MATCHING_ENGINE.md §2 filters 7–8), so the first signal was loads drying up; and
+  (c) there was **no CI at all**, despite 01_PROJECT_RULES.md §3 requiring green CI to merge —
+  a missing import had already reached the repo because debug builds tolerated what
+  `flutter build apk --release` rejected, and no automated job ran that compile.
+- **Decision:**
+  1. **Radius escalation (Part 3):** the pickup radius climbs a configured ladder as a load ages
+     (`Matching:RadiusEscalation`, default 15min→10km, 30→20, 60→50, 120→100). Resolved at query
+     time from the load's age, so there is **no state to mutate and no job**: the same load simply
+     matches a wider set of drivers as time passes. Escalation **only ever widens** — a Highway
+     load already sits at 25km, and applying an early 10km rung literally would shrink its reach
+     and hide it from drivers who could already see it. Rungs are sorted on read so a mis-ordered
+     config array behaves identically.
+  2. **Document expiry sweep (Parts 13 & 17):** `IDocumentExpiryService` warns holders at
+     30/15/7/1 days and once after lapse; thresholds and cadence are config
+     (`DocumentExpiry:*`). Idempotency is the crux — the sweep re-evaluates every document each
+     tick, so `DocumentExpiryReminder` is an **append-only record per (document, threshold)**,
+     following the `DocumentReview`/`AuditLog` pattern, with a **unique index** making a
+     double-send a database error rather than silent spam. Between rungs the **nearest accurate**
+     threshold is chosen, so a missed day still warns correctly. `DocumentExpiryWorker`
+     (`BackgroundService`) owns only scheduling — the due-date rule stays testable without a host
+     — takes a scope per pass rather than capturing a scoped `DbContext`, and logs-and-retries a
+     failed pass instead of dying.
+  3. **CI (Part 19, closes T-011):** three independent GitHub Actions jobs (backend / admin /
+     mobile) so a red one names the broken tier. The mobile job runs `flutter analyze`, tests,
+     **and a release APK compile** — the step that would have caught the import. Warnings are
+     **not** promoted to errors: the analyzers flag style beside correctness, and failing CI on
+     style trains people to skip it.
+- **Alternatives considered:** radius escalation as a scheduled job mutating each load's radius
+  (rejected: persists derived state that a pure function of age already gives, and adds a failure
+  mode); expiry idempotency via a "last notified" column on `Document` (rejected: mutates the
+  aggregate for bookkeeping and loses the history, where an append-only record matches existing
+  convention and is auditable); treating warnings as errors in CI (rejected as above).
+- **Consequences:** 231 backend tests green (was 208). Two EF migrations
+  (`BackfillLoadStatusFromCompletedTrips`, `DocumentExpiryReminders`). Every RC-2 Part 19 gate now
+  runs on push. **Open discrepancy:** the RC-2 brief lists Highway at **20km** where ADR-0020 and
+  MATCHING_ENGINE.md §2 specify **25km** — the accepted 25 is kept and the conflict raised rather
+  than silently resolved; it is a one-line config change either way. **Not addressed by this ADR:**
+  Parts 9/10/11/12/14/16 and the client-side remainder of 1/2/5/8/15 — see `04_CURRENT_TASK.md`.
+
 ## ADR-0020 — Workflow correction sprint: availability, radius filtering, document verification, owner-confirmation trip gates, live push
 - **Date:** 2026-08-01
 - **Status:** Accepted

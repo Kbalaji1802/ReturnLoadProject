@@ -40,6 +40,32 @@ Coarse, communication-friendly milestones, each owned by one **bounded context**
 
 ---
 
+## RC-2 remainder — ordered by what unblocks pilot use
+
+Full per-part ledger: [`docs/design/RC2_RELEASE_CANDIDATE.md`](../docs/design/RC2_RELEASE_CANDIDATE.md).
+Ordered by impact, **not** by part number.
+
+- [ ] **RC2-A — Persistent document storage.** Uploads live on container-local disk and are wiped
+      every redeploy. Compliance documents are legal records; this outranks every remaining
+      feature. Object storage or a mounted volume behind the existing `IFileStorageService`
+      (ADR-0012) — the seam is already there.
+- [ ] **RC2-B — Client test coverage.** 1 smoke test in mobile, 1 scaffold spec in admin, against
+      231 backend tests. Every client bug found during deployment was in untested code. CI now
+      runs these, so they start paying immediately.
+- [ ] **RC2-C — ADR-0020 client remainder (Parts 1, 2, 5, 8, 15).** Document preview controls and
+      the 20-char reject minimum; 3s GPS ping and real maps; form-reset sweep; dashboard charts;
+      polish. Backend already exists — cheapest visible progress per hour.
+- [ ] **RC2-D — Part 9 vehicle documents + Part 12 audit UI.** Both mostly surface over aggregates
+      that already exist (`Document`, `AuditLog`).
+- [ ] **RC2-E — Parts 10, 11, 14.** Global search, reports (CSV/Excel/PDF — no dependency chosen
+      yet), branch/dispatcher. Each is a substantial new feature.
+- [ ] **RC2-F — Part 16 Redis, last.** Caching an app with no measured load is guessing. Introduce
+      against a profile, never over mutable transactional data.
+- [ ] **RC2-G — Migration coverage.** Integration tests build schema with `EnsureCreated()`, so
+      migration SQL first runs on deploy and drift is invisible. Add a migrate-based fixture.
+- [ ] **RC2-H — Release signing + package id.** APK is debug-signed as
+      `com.example.returnload_mobile`; Play rejects both, and the id is permanent once published.
+
 ## Phase 0 — Decisions (do before coding)
 
 - [~] **T-001 — Lock the stack + bootstrap the foundation.** ✅ Backend framework

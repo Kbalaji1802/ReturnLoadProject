@@ -7,36 +7,42 @@
 
 ## Active task
 
-**M4 — MVP Sprint (application layer + clients)** — 🟢 **Backend + Admin done & verified;
-Mobile written (unverified); live click-through pending.** (Decisions in **ADR-0016**.)
+**RC-2 — Release Candidate 2: MVP → pilot-ready.** 🟡 **In progress.**
+Decisions in **ADR-0021**; full per-part ledger in
+[`docs/design/RC2_RELEASE_CANDIDATE.md`](../docs/design/RC2_RELEASE_CANDIDATE.md).
 
-### Verified this sprint
-- **Backend APIs** (Application services + REST): carriers, drivers (register + list),
-  vehicles (register/activate), documents (upload + pending + approve→driver verified +
-  reject), loads (post/browse/get/accept), trips (create/get/advance/tracking). Envelope,
-  M1.5 hardening, M2 policy authz, `DomainException`→400. **147 tests green** incl. a full
-  onboarding→verify→load→trip service+SQLite flow test.
-- **Angular admin**: login + guard + interceptor + shell + dashboard/drivers/documents/
-  loads/trips/settings. **`ng build` succeeds.**
-- **Demo seeding** (Development): admin/carrier/driver/shipper users + roles + demo carrier
-  + shipper profile.
+### Delivered and verified this increment
+- **Part 3 — radius escalation.** An unaccepted load widens its pickup radius on a configured
+  ladder as it ages (`Matching:RadiusEscalation`). Resolved from load age at query time, so no
+  state to mutate and no job. Only ever widens. 12 tests.
+- **Parts 13 + 17 — document expiry sweep.** Holders warned at 30/15/7/1 days and once after
+  lapse; thresholds and cadence config-driven. Idempotent via an append-only
+  `DocumentExpiryReminder` per (document, threshold) with a unique index, so the timer cannot
+  re-send. `DocumentExpiryWorker` schedules; the due-date rule stays host-free and testable.
+  23 tests.
+- **Part 19 — CI (closes T-011).** Three jobs (backend/admin/mobile) on every push; the mobile job
+  runs the **release APK compile** that a debug build does not. Every command verified locally
+  first.
+- **All five release gates green:** 231 backend tests, `ng build --configuration production`,
+  `ng test`, `flutter analyze` (clean), `flutter test`, `flutter build apk --release`.
 
-### Written but NOT build-verified
-- **Flutter mobile** (login → dashboard → loads(accept) → tracking): the **Flutter SDK is
-  not installed here**, so it compiles-in-principle but is unverified. Same API contracts.
+### Already delivered by ADR-0020 (do not rebuild)
+Backend for Parts 1, 2, 4, 6, 7 — document review DTO/file endpoint/append-only history, SignalR
+tracking + ETA, owner-confirmation gates with participant authorisation, driver availability,
+notifications. **The outstanding work on these is client-side.**
 
-### Placeholders (external services not configured)
-- **Maps/GPS:** tracking screen shows real recorded points + "Maps integration pending API
-  key" banner (no fake live map).
-- **Payments:** `IPaymentService` interfaces only (ADR-0005). **SMS/OTP / email:** not wired.
+### Not started
+Parts 9 (vehicle documents), 10 (global search), 11 (reports), 12 (audit UI), 14 (branch/
+dispatcher), 16 (Redis). Parts 5, 8, 15 partly done client-side.
 
-### Not yet done
-- Live PostgreSQL run + browser/device click-through (Docker is available; see README/report).
-- Matching engine, real GPS ingestion, notifications delivery, shipper mobile flows.
+### Blocking limitation
+**Uploaded documents are ephemeral** — container-local storage is wiped on every redeploy. For a
+platform whose compliance documents are legal records this outranks every remaining feature.
 
-### Status
-Sprint increment committed. Next: stand up Postgres (docker compose) for a live run, then
-the matching engine (M9) or hardening of the onboarding APIs.
+### Open decision
+The RC-2 brief lists the Highway pickup radius at **20km**; ADR-0020 and `MATCHING_ENGINE.md` §2
+specify **25km**. The accepted 25 is in force. One-line config change either way — decide and
+amend the ADR.
 
 ---
 
