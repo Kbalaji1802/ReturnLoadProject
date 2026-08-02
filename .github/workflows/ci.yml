@@ -1,0 +1,103 @@
+# Build and test every tier on every push (01_PROJECT_RULES.md §3 "green CI", T-011).
+#
+# The three tiers run as independent jobs so a Flutter failure still reports the .NET result —
+# one red job names the broken tier instead of just "the build failed". This exists because a
+# missing import once shipped to the repo: debug builds tolerated it, `flutter build apk
+# --release` did not, and nothing ran the release compile automatically.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+# A new push supersedes an in-flight run on the same ref; no point finishing a build for a
+# commit that has already been replaced.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (.NET 9)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore
+        run: dotnet restore backend/ReturnLoad.sln
+
+      # Warnings stay visible rather than being promoted to errors: the analyzers flag style
+      # alongside correctness, and failing CI on style would train people to skip it.
+      - name: Build
+        run: dotnet build backend/ReturnLoad.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test backend/ReturnLoad.sln -c Release --no-build --verbosity normal
+
+  admin:
+    name: Admin (Angular)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+
+      - name: Install
+        working-directory: admin
+        run: npm ci
+
+      # The production configuration, not the default: it is the one with the bundle budgets,
+      # and a budget overrun only fails there.
+      - name: Build
+        working-directory: admin
+        run: npm run build -- --configuration production
+
+      # `ng test` (@angular/build:unit-test + vitest) runs once and exits here — no watch flag.
+      - name: Test
+        working-directory: admin
+        run: npm test
+
+  mobile:
+    name: Mobile (Flutter)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.6"
+          channel: stable
+          cache: true
+
+      - name: Install
+        working-directory: mobile
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: mobile
+        run: flutter analyze
+
+      - name: Test
+        working-directory: mobile
+        run: flutter test
+
+      # The gate that matters. A release compile catches what debug builds tolerate; the API
+      # URL is a placeholder because this proves compilation, not connectivity.
+      - name: Release build
+        working-directory: mobile
+        run: flutter build apk --release --dart-define=API_BASE_URL=https://ci.invalid/api/v1

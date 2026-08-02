@@ -114,7 +114,7 @@ class _LoadRequestsScreenState extends ConsumerState<LoadRequestsScreen> {
             const SizedBox(height: 10),
             // Real decision context (Part 7) — never a hardcoded "verified" claim.
             Wrap(spacing: 8, runSpacing: 8, children: [
-              _chip(Icons.star, rating != null ? '${rating.toStringAsFixed(1)} (${completedTrips} trips)' : 'New · $completedTrips trips'),
+              _chip(Icons.star, rating != null ? '${rating.toStringAsFixed(1)} ($completedTrips trips)' : 'New · $completedTrips trips'),
               if (verification != null)
                 _chip(verification == 1 ? Icons.verified : Icons.gpp_maybe,
                     driverStatus[verification] ?? '—',
